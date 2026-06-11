@@ -1,0 +1,1393 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+:root{
+  --app-bg: #0b1120;
+  --app-surface: rgba(17, 24, 39, 0.74);
+  --app-surface-soft: rgba(255, 255, 255, 0.05);
+  --app-border: rgba(255, 255, 255, 0.08);
+  --app-text: #f7fbff;
+  --app-text-muted: #91a0bd;
+  --app-accent: #ffb86b;
+  --app-accent-2: #46cdcf;
+}
+*{
+  font-family: 'Roboto', sans-serif;
+  box-sizing: border-box;
+}
+
+body{
+  margin: 0;
+  background:
+      radial-gradient(circle at top left, rgba(255,184,107,0.12), transparent 26%),
+      radial-gradient(circle at top right, rgba(70,205,207,0.08), transparent 22%),
+      linear-gradient(180deg, #0b1120 0%, #0d1424 100%);
+  color: var(--app-text);
+}
+#app {
+  font-family: "Poppins", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--app-text);
+}
+.pageBlock{
+  padding-bottom: 70px;
+}
+h5{
+  font-size: 15px;
+}
+h4{
+  font-size: 18px;
+}
+h3{
+  font-size: 23px;
+}
+h2{
+  font-size: 30px;
+}
+label{
+  font-size: 18px;
+}
+.page, .header{
+  padding: 20px 15%;
+}
+.cut-text {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  width: 100%;
+  height: 1.2em;
+  white-space: nowrap;
+}
+@media only screen and (max-width: 1550px) {
+  .page, .header{
+    padding: 20px 8%;
+  }
+}
+@media only screen and (max-width: 1210px) {
+  .page, .header{
+    padding: 20px 2%;
+  }
+}
+@media only screen and (max-width: 830px) {
+  .page, .header{
+    padding: 0 2%;
+  }
+}
+.pagination{
+  background-color: #fff;
+}
+.list-style-none {
+  list-style: none; /* Remove default bullets */
+}
+
+.list-style-content li::before {
+  content: "\2022";  /* Add content: \2022 is the CSS Code/unicode for a bullet */
+  color: #ba6f0b; /* Change the color */
+  font-weight: bold; /* If you want it to be bold */
+  display: inline-block; /* Needed to add space between the bullet and the text */
+  width: 1em; /* Also needed for space (tweak if needed) */
+  margin-left: -1em; /* Also needed for space (tweak if needed) */
+}
+li{
+  list-style: none;
+}
+a{
+  color: inherit;
+  text-decoration: none;
+}
+input, select, textarea, button{
+  font-family: "Poppins", sans-serif;
+}
+.t-decoration-underline, .t-decoration-underline-hover:hover{
+  text-decoration: underline;
+}
+.l-height-1{
+  line-height: 1;
+}
+.l-height-0{
+  line-height: 0;
+}
+.t-center{
+  text-align: center;
+}
+.t-right{
+  text-align: right;
+}
+.f-right{
+  float: right;
+}
+.margin-1{
+  margin: 1em;
+}
+.margin-03{
+  margin: .3em;
+}
+.margin-0{
+  margin: 0;
+}
+.margin-05{
+  margin: .5em;
+}
+.m-0-auto{
+  margin: 0 auto;
+}
+.m-top-0{
+  margin-top: 0;
+}
+.m-top-01{
+  margin-top: .1em;
+}
+.m-top-05{
+  margin-top: 0.5em;
+}
+.m-top-03{
+  margin-top: 0.3em;
+}
+.m-top-1{
+  margin-top: 1em;
+}
+.m-top-1_5{
+  margin-top: 1.5em;
+}
+.m-top-2{
+  margin-top: 2em;
+}
+.m-top-3{
+  margin-top: 3em;
+}
+.m-top-8{
+  margin-top: 8em;
+}
+.m-bottom-0{
+  margin-bottom: 0;
+}
+.m-bottom-_1{
+  margin-bottom: .1em;
+}
+.m-bottom-_2{
+  margin-bottom: .2em;
+}
+.m-left-minus-1{
+  margin-left: -1em;
+}
+.m-left-05{
+  margin-left: .5em;
+}
+.m-left-1{
+  margin-left: 1em;
+}
+.m-left-2{
+  margin-left: 2em;
+}
+.m-right-03{
+  margin-right: .3em;
+}
+.m-right-05{
+  margin-right: .5em;
+}
+.m-right-1{
+  margin-right: 1em;
+}
+.m-bottom-1{
+  margin-bottom: 1em;
+}
+.m-bottom-_5{
+  margin-bottom: .5em;
+}
+.m-bottom-_3{
+  margin-bottom: .3em;
+}
+.m-bottom-2{
+  margin-bottom: 1em;
+}
+
+.padding-0{
+  padding: 0;
+}
+.padding-02{
+  padding: .2em;
+}
+.padding-03{
+  padding: .3em;
+}
+.padding-05{
+  padding: .5em;
+}
+.padding-1{
+  padding: 1em;
+}
+.padding-12{
+  padding: 12px;
+}
+.padding-2{
+  padding: 2em;
+}
+.padding-bottom-05{
+  padding-bottom: .5em;
+}
+.padding-bottom-1{
+  padding-bottom: 1em;
+}
+.padding-top-05{
+  padding-top: .5em;
+}
+.padding-top-1{
+  padding-top: 1em;
+}
+.padding-top-1_5{
+  padding-top: 1.5em;
+}
+.padding-top-2{
+  padding-top: 2em;
+}
+.padding-left-1_5{
+  padding-left: 1.5em;
+}
+.padding-left-03{
+  padding-left: .3em;
+}
+.padding-left-0{
+  padding-left: 0;
+}
+.padding-left-1{
+  padding-left: 1em;
+}
+.padding-left-3{
+  padding-left: 3em;
+}
+.padding-right-1{
+  padding-right: 1em;
+}
+.padding-right-3{
+  padding-right: 3em;
+}
+.padding-14p{
+  padding: 14px;
+}
+.padding-x-8p{
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.padding-x-16p{
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.padding-x-40p{
+  padding-left: 40px;
+  padding-right: 40px;
+}
+.padding-x-24p{
+  padding-left: 24px;
+  padding-right: 24px;
+}
+.padding-x-8p{
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.padding-y-2p{
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.padding-y-10p{
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.padding-y-12p{
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.padding-y-14p{
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.padding-y-32p{
+  padding-top: 32px;
+  padding-bottom: 32px;
+}
+.padding-y-8p{
+   padding-top: 8px;
+   padding-bottom: 8px;
+ }
+.c-pointer{
+  cursor: pointer;
+}
+.f-size-very-small{
+  font-size: 10px;
+}
+.f-size-small{
+  font-size: 13px;
+}
+.f-size-15{
+  font-size: 15px;
+}
+.f-size-14{
+  font-size: 14px;
+}
+.f-size-13{
+  font-size: 13px;
+}
+.f-size-10{
+  font-size: 10px;
+}
+.f-size-12{
+  font-size: 12px;
+}
+.f-size-16{
+  font-size: 16px;
+}
+.f-size-18{
+  font-size: 18px;
+}
+.f-size-20{
+  font-size: 20px;
+}
+.f-size-22{
+  font-size: 22px;
+}
+.f-size-24{
+  font-size: 24px;
+}
+.f-size-26{
+  font-size: 26px;
+}
+.f-size-28{
+  font-size: 28px;
+}
+.f-size-30{
+  font-size: 30px;
+}
+.f-size-32{
+  font-size: 32px;
+}
+.f-size-34{
+  font-size: 34px;
+}
+.f-size-36{
+  font-size: 36px;
+}
+.f-size-38{
+  font-size: 38px;
+}
+.f-size-40{
+  font-size: 40px;
+}
+.f-size-48{
+  font-size: 48px;
+}
+.social-icon-size{
+  font-size: 23px;
+}
+.f-weight-bold{
+  font-weight: bold;
+}
+.f-weight-700{
+  font-weight: 700;
+}
+.f-weight-900{
+  font-weight: 900;
+}
+.f-weight-500{
+  font-weight: 500;
+}
+.d-grid{
+  display: grid;
+}
+.grid-template-column-2fr{
+  grid-template-columns: 1fr 1fr;
+}
+.grid-template-column-3fr{
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.grid-template-column-4fr{
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+.grid-template-column-5fr{
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+}
+.grid-template-column-6fr{
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+}
+.grid-template-column-7fr{
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+}
+.grid-template-column-8fr{
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+}
+.g-gap-_1{
+  grid-gap: .1em;
+}
+.g-gap-_2{
+  grid-gap: .2em;
+}
+.g-gap-_3{
+  grid-gap: .3em;
+}
+.g-gap-_5{
+  grid-gap: .5em;
+}
+.g-gap-_8{
+  grid-gap: .8em;
+}
+.g-gap-_8{
+  grid-gap: .8em;
+}
+.g-gap-1{
+  grid-gap: 1em;
+}
+.g-gap-1_5{
+  grid-gap: 1.5em;
+}
+.g-gap-2{
+  grid-gap: 2em;
+}
+.g-gap-3{
+  grid-gap: 3em;
+}
+.g-gap-4{
+  grid-gap: 4em;
+}
+.g-gap-5{
+  grid-gap: 5em;
+}
+.d-flex{
+  display: flex;
+}
+.flex-center{
+  justify-content: center;
+  align-items: center;
+}
+.j-content-center{
+  justify-content: center;
+}
+.j-content-flex-end{
+  justify-content: flex-end;
+}
+.j-content-space-between{
+  justify-content: space-between;
+}
+.j-content-space-evenly{
+  justify-content: space-evenly;
+}
+.d-none{
+  display: none;
+}
+.d-block{
+  display: block;
+}
+.d-inline-block{
+  display: inline-block;
+}
+.d-block-hover:hover > *{
+  display: block;
+}
+.d-flex-hover:hover > *{
+  display: flex;
+}
+.a-items-flex-start{
+  align-items: flex-start;
+}
+.a-items-center{
+  align-items: center;
+}
+.a-items-flex-end{
+  align-items: flex-end;
+}
+.o-hidden{
+  overflow: hidden;
+}
+.overflow-auto{
+  overflow: auto;
+}
+.b-solid-ccc{
+  border: 1px solid#ccc;
+}
+.b-bottom-ccc{
+  border-bottom: 1px solid rgba(204, 204, 204, 0.65);
+}
+.b-top-ccc{
+  border-top: 1px solid rgba(204, 204, 204, 0.65);
+}
+.b-radius-6{
+  border-radius: 6px;
+}
+.b-radius-8{
+  border-radius: 8px;
+}
+.b-radius-12{
+  border-radius: 12px;
+}
+.b-radius-12-0{
+  border-radius: 12px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.b-radius-20{
+  border-radius: 20px;
+}
+.b-radius-40{
+  border-radius: 40px;
+}
+.b-radius-50{
+  border-radius: 50%;
+}
+.width-8{
+  width: 8px;
+}
+.width-24{
+  width: 24px;
+}
+.w-max{
+  width: 100%;
+}
+.w-fit-content{
+  width: fit-content;
+}
+.max-width-max{
+  max-width: 100%;
+}
+.w-max-content{
+  width: max-content;
+}
+.w-webkit-fill-available{
+  width: -webkit-fill-available;
+}
+.w-200{
+  width: 200px;
+}
+.max-width-200{
+  max-width: 200px;
+}
+.max-width-100{
+  max-width: 100px;
+}
+.min-height-500{
+  min-height: 500px;
+}
+.min-height-100vh{
+  min-height: 100vh;
+}
+.height-8{
+  height: 8px;
+}
+.height-24{
+  height: 24px;
+}
+.h-max{
+  height: 100%;
+}
+.h-100-vh{
+  height: 100vh;
+}
+.h-max-content{
+  height: max-content;
+}
+.bg-yellow{
+  background-color: rgba(251, 232, 78, 0.6);
+}
+.bg-initial{
+  background-color: initial !important;
+}
+.bg-red{
+  background-color: #a43030;
+}
+.bg-c3{
+  background-color: rgba(195, 195, 195, 0.19);
+}
+.bg-97{
+  background-color: #979797;
+}
+.bg-97-hover:hover{
+  background-color: #979797;
+  color: #fff;
+}
+.bg-content, .bg-content-hover:hover{
+  background-color: rgba(242, 228, 247, 1);
+  color: #210227;
+  font-weight: 500;
+}
+.bg-content-opacity, .bg-content-opacity-hover:hover{
+  background-color: rgba(242, 228, 247, 1);
+}
+.bg-fff{
+  background-color: #fff;
+}
+.bg-000{
+  background-color: #000;
+}
+.bg-ccc{
+  background-color: #ccc;
+}
+.bg-ccc-opacity-hover:hover{
+  background-color: rgba(204, 204, 204, 0.07);
+}
+.bg-ccc-opacity{
+  background-color: rgba(204, 204, 204, 0.23);
+}
+.bg-c5c-hover:hover{
+  background-color: #cccccc5c;
+}
+.bg-c5c{
+  background-color: #cccccc5c;
+}
+.bg-555{
+  background: #777;
+}
+.bg-999{
+  background-color: #999;
+}
+.bg-b7{
+  background-color: #b7b7b7;
+}
+.bg-green{
+  background-color: #09801c;
+}
+.bg-blue{
+  background-color: #084aad;
+}
+.c-content, .c-content-hover:hover{
+  color: rgba(242, 228, 247, 1) !important;
+}
+.c-000{
+  color: #000;
+}
+.c-success-50{
+  color: rgba(88, 189, 125, 1);
+}
+.c-olivie{
+  color: #808000;
+}
+.c-blue-opacity{
+  color: #005380a8;
+}
+
+.c-97{
+  color: #979797;
+}
+.c-ccc{
+  color: #ccc;
+}
+.c-555{
+  color: #555;
+}
+.c-000{
+  color: #000;
+}
+.c-fff{
+  color: #fff;
+}
+.c-b0{
+  color: #b08d7e;
+}
+.c-6d{
+  color: #6d6d6d;
+}
+.c-red, .c-red-hover:hover{
+  color: #a43506;
+}
+
+.b-content, .b-content-hover:hover{
+  border: 1px solid #0996a4;
+}
+.p-absolute{
+  position: absolute;
+}
+.p-relative{
+  position: relative;
+}
+.p-fixed{
+  position: fixed;
+}
+.absolute-center{
+  top: 50%;
+  bottom: 50%;
+  left: 50%;
+  right: 50%;
+  transform: translate(-50%, -50%);
+}
+.z-index-1{
+  z-index: 1;
+}
+.z-index-5{
+  z-index: 5;
+}
+.z-index-10{
+  z-index: 10;
+}
+.z-index-max{
+  z-index: 999;
+}
+.border-0{
+  border: 0;
+}
+.border-bottom-yellow{
+  border-bottom: 1px solid rgba(251, 232, 78, 0.6);
+}
+.border-dark-1{
+  border: 1px solid #20232D;
+}
+.border-dark-2{
+  border: 1px solid#20232D;
+}
+.bott-0{
+  bottom: 0;
+}
+.top-max{
+  top: 100%;
+}
+.top-0{
+  top: 0;
+}
+.right-0{
+  right: 0;
+}
+.left-0{
+  left: 0;
+}
+.bottom-0{
+  bottom: 0;
+}
+.outline-content:focus{
+  outline: 0;
+  border: 1px solid #ba6f0b;
+}
+.outline-none:focus{
+  outline: 0;
+  border: 0;
+}
+.cut-text {
+  overflow:hidden;
+  display: inline-block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.form-standard{
+  border: thin solid #ccc;
+  display: inline-block;
+  line-height: 1.5em;
+  padding: 12px;
+  height: fit-content;
+}
+.modal{
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  z-index: 999;
+  background: rgba(255, 255, 255, 0.05); /* светлая прозрачность */
+  backdrop-filter: blur(12px);           /* размытие фона */
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+  color: #fff;
+  margin: auto;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+
+}
+.modal-content{
+  background-color: #fff;
+  padding: 35px;
+  overflow-y: auto;
+  box-shadow: 0px 2px 31px -1px rgba(0,0,0,0.24);
+  -webkit-box-shadow: 0px 2px 31px -1px rgba(0,0,0,0.24);
+  -moz-box-shadow: 0px 2px 31px -1px rgba(0,0,0,0.24);
+  z-index: 9;
+  margin-top: -20px;
+}
+
+.animation-from-left{
+  animation-name: animation-from-left;
+  animation-duration: .2s;
+}
+@keyframes animation-from-left {
+  0%{
+    margin-left: -50%;
+  }
+  100%{
+    margin-left: 0;
+  }
+}
+.animation-from-right{
+  animation-name: animation-from-right;
+  animation-duration: .2s;
+}
+@keyframes animation-from-right {
+  0%{
+    margin-right: -50%;
+  }
+  100%{
+    margin-right: 0;
+  }
+}
+
+.animation-from-left-long{
+  animation-name: animation-from-left-long;
+  animation-duration: .5s;
+}
+@keyframes animation-from-left-long {
+  0%{
+    margin-left: -50%;
+  }
+  100%{
+    margin-left: 0;
+  }
+}
+.animation-from-right-long{
+  animation-name: animation-from-right-long;
+  animation-duration: .5s;
+}
+@keyframes animation-from-right-long {
+  0%{
+    margin-right: -50%;
+  }
+  100%{
+    margin-right: 0;
+  }
+}
+
+.animation-from-bottom{
+  animation-name: animation-from-bottom;
+  animation-duration: .3s;
+}
+
+@keyframes animation-from-bottom {
+  0%{
+    margin-bottom: -50%;
+  }
+  100%{
+    margin-bottom: 0;
+  }
+}
+.animation-from-bottom-long{
+  animation-name: animation-from-bottom-long;
+  animation-duration: .5s;
+}
+@keyframes animation-from-bottom-long {
+  0%{
+    margin-bottom: -50%;
+  }
+  100%{
+    margin-bottom: 0;
+  }
+}
+.animation-from-top-long{
+  animation-name: animation-from-top-long;
+  animation-duration: .5s;
+}
+
+@keyframes animation-from-top-long {
+  0%{
+    margin-top: -50%;
+  }
+  100%{
+    margin-top: 0;
+  }
+}
+.animation-from-hidden{
+  animation-name: animation-from-hidden;
+  animation-duration: .2s;
+}
+
+.animation-from-hidden-infinite{
+  animation: animation-from-hidden-infinite 1s infinite;
+}
+@keyframes animation-from-hidden {
+  0%{
+    opacity: 0;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+.animation-from-hidden-long{
+  animation-name: animation-from-hidden-long;
+  animation-duration: .7s;
+}
+@keyframes animation-from-hidden-long {
+  0%{
+    opacity: 0;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+@keyframes animation-from-hidden-infinite {
+  0%{
+    opacity: 1;
+  }
+  50%{
+    opacity: .5;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+
+.err-msg{
+  color: #a43506;
+}
+.color-yellow{
+  color: #FBE84E;
+}
+.color-blue{
+  color: #345988;
+}
+.color-green{
+  color: #1f640b;
+}
+/*IMAGE STYLE*/
+.img_parent{
+  background-color: #fff;
+  border: 2px solid #eee;
+  padding: 6px;
+  border-radius: 12px;
+  margin-top: -2em;
+}
+.img_div{
+  border: 1px solid#fff;
+  border-radius: 12px;
+}
+
+
+@keyframes rotation {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/*PAGINATE*/
+.paginate{
+  display: flex;
+  grid-gap: 5px;
+}
+.paginate > li{
+  border: 1px solid #e1e1e1;
+  border-radius: 6px;
+}
+.paginate > li > a{
+  display: block;
+  padding: 6px;
+  cursor: pointer;
+}
+.paginate > li.active{
+  border: 1px none;
+  color: #ba6f0b;
+}
+.paginate > li.active > a{
+  cursor: initial;
+}
+
+/*BOX SHADOW*/
+.box-shadow-yellow{
+
+  box-shadow: 0px 2px 9px 0px rgba(251, 232, 78, 0.60);
+  -webkit-box-shadow: 0px 2px 9px 0px rgba(251, 232, 78, 0.60);
+  -moz-box-shadow: 0px 2px 9px 0px rgba(251, 232, 78, 0.60);
+}
+.box-shadow-slim{
+  box-shadow: 0px 0px 5px 0px rgba(0,0,0,0.12);
+  -webkit-box-shadow: 0px 0px 5px 0px rgba(0,0,0,0.12);
+  -moz-box-shadow: 0px 0px 5px 0px rgba(0,0,0,0.12);
+}
+.lang_radio label{
+  font-size: 22px !important;
+}
+.lang_radio .radios{
+  display: grid;
+  line-height: 1;
+}
+
+.order-1{
+  order: 1;
+}
+.order-2{
+  order: 2;
+}
+.order-3{
+  order: 3;
+}
+.order-4{
+  order: 4;
+}
+.text-5-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+/*THREAD*/
+#tradingview-chart, #tradingview-chart >div:first-child, #tradingview-mini-chart > div{
+  width: 100% !important;
+}
+
+.rotate-withdraw{
+  transform: rotate(-40deg);
+}
+.rotate-deposit{
+  transform: rotate(140deg);
+}
+
+/*Color Modes*/
+svg path {
+  fill: var(--svg-color);
+}
+.svg-static-color svg{
+  --svg-color: transparent !important;
+}
+
+
+/*DARK MODE*/
+body .dark-mode svg{
+  --svg-color: #FFFFFF;
+}
+body .dark-mode .bg-mode-1{
+  /*background-color: #0d0d10 !important;*/
+    background:
+            linear-gradient(135deg, #071f29, #082a39, #032b3c);
+    background-blend-mode: overlay;
+    /*height: 100vh;*/
+    /*margin: 0;*/
+}
+body .dark-mode .bg-mode-2{
+  /*background-color: rgba(20, 21, 26, 1) !important;*/
+    background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 0 20px rgba(0,0,0,0.3);
+}
+body .dark-mode .bg-mode-2-hover:hover{
+  background-color: rgba(20, 21, 26, 1) !important;
+}
+body .dark-mode .bg-mode-3{
+  background: rgba(25, 28, 36, 1);
+}
+body .dark-mode .c-mode-1{
+  color: #ffffff !important;
+}
+body .dark-mode .c-mode-2{
+  color: #fff !important;
+  opacity: .4;
+}
+body .dark-mode .b-mode-1{
+  border: 1px solid rgba(32, 35, 45, 1);
+}
+body .dark-mode .b-bottom-mode-1{
+  border-bottom: 1px solid rgba(32, 35, 45, 1);
+}
+body .dark-mode .c-mode-3{
+  color: #B9BFD5 !important;
+}
+body .dark-mode .c-mode-3-placeholder::placeholder{
+  color: #B9BFD5 !important;
+}
+body .dark-mode .c-mode-4{
+  color: #C1B1C9 !important;
+}
+body .dark-mode .c-mode-icon-rested, body .dark-mode .c-mode-icon-rested svg{
+  color: rgba(185, 191, 213, 1) !important;
+  --svg-color: rgba(185, 191, 213, 1) !important;
+}
+body .dark-mode .c-pallete-primary-primary-20{
+  color: rgba(112, 106, 115, 1);
+}
+body .dark-mode .c-pallete-primary-primary-50{
+  color: #F2E4F7 !important;
+}
+body .dark-mode .bg-button-rested{
+  background-color: rgba(242, 228, 247, 1);
+}
+body .dark-mode .bg-surface-surface-tertiary{
+  background-color: rgba(25, 28, 36, 1);
+}
+body .dark-mode .bg-button-secondary-button-rested{
+  background-color: rgba(36, 39, 51, 1);
+}
+body .dark-mode .b-bottom-surface-surface-additional{
+  border-bottom: 1px solid rgba(54, 60, 77, 1);
+}
+body .dark-mode .bg-surface-surface-tertiary{
+  background-color: rgba(25, 28, 36, 1);
+}
+body .dark-mode .bg-surface-surface-secondary{
+  background-color: rgba(20, 21, 26, 1);
+}
+body .dark-mode .border-secondary{
+  border: 1px solid rgba(54, 60, 77, 1);
+}
+body .dark-mode .c-pallete-error-Error-50{
+  color: rgba(217, 18, 78, 1) !important;
+  --svg-color: rgba(217, 18, 78, 1) !important;
+}
+body .dark-mode .c-pallete-error-Error-20{
+  color: rgba(146, 15, 55, 1) !important;
+  --svg-color: rgba(146, 15, 55, 1) !important;
+}
+body .dark-mode .bg-pallete-error-Error-20{
+  background-color: rgba(146, 15, 55, 1) !important;
+}
+body .dark-mode .c-pallete-success-60{
+  color: rgba(83, 245, 153, 1) !important;
+  --svg-color: rgba(83, 245, 153, 1) !important;
+}
+body .dark-mode .bg-success-50{
+  background: rgba(88, 189, 125, 1) !important;
+}
+body .dark-mode .bg-button-primary{
+  background-color: rgba(242, 228, 247, 1);
+}
+body .dark-mode .c-button-primary{
+  color: rgba(242, 228, 247, 1);
+}
+body .dark-mode .bg-pallete-warning-10{
+  background-color: rgba(71, 67, 61, 1);
+}
+body .dark-mode .b-border-primary{
+  border: 1px solid #20232D;
+}
+body .dark-mode .b-border-mode-1{
+  border: 1px solid #fff;
+}
+body .dark-mode .c-text-text-headeings{
+  color: rgba(33, 2, 39, 1);
+}
+body .dark-mode .c-text-text-disabled{
+  color: rgba(70, 75, 87, 1);
+}
+body .dark-mode .b-primary-button-rested{
+  border: 1px solid #F2E4F7;
+}
+body .dark-mode .b-pallete-success-50{
+  border: 1px solid rgba(88, 189, 125, 1);
+}
+body .dark-mode .c-pallete-success-50{
+  color: rgba(88, 189, 125, 1) !important;
+}
+body .dark-mode .c-icon-menu-active{
+  color: rgba(70, 75, 87, 1);
+  --svg-color: rgba(70, 75, 87, 1);
+}
+body .dark-mode .c-icon-menu-rested, body .dark-mode .c-icon-menu-rested svg{
+  color: rgba(193, 177, 201, 1);
+  --svg-color: rgba(193, 177, 201, 1);
+}
+body .dark-mode .c-notification-warning{
+  color: rgba(252, 170, 0, 0.71) !important;
+  --svg-color: rgba(252, 170, 0, 0.65) !important;
+}
+body .dark-mode .b-left-notification-warning{
+  border-left: 4px solid rgba(252, 170, 0, 1);
+}
+body .dark-mode .c-yellow-60{
+  color: rgba(255, 212, 36, 1);
+}
+body .dark-mode .c-yellow-60 svg{
+  color: rgba(255, 212, 36, 1);
+  --svg-color: rgba(255, 212, 36, 1);
+}
+
+body .dark-mode .list-style-mode-1 li::before {
+  content: "\2022";  /* Add content: \2022 is the CSS Code/unicode for a bullet */
+  color: #fff; /* Change the color */
+  font-weight: bold; /* If you want it to be bold */
+  display: inline-block; /* Needed to add space between the bullet and the text */
+  width: 1em; /* Also needed for space (tweak if needed) */
+  margin-left: -1em; /* Also needed for space (tweak if needed) */
+}
+
+
+/* LIGHT MODE */
+body .light-mode svg {
+  --svg-color: #000000;
+}
+body .light-mode .bg-mode-1 {
+  background-color: #fff !important;
+}
+body .light-mode .bg-mode-2-hover:hover {
+  background-color: rgba(235, 235, 235, 1) !important;
+}
+body .light-mode .bg-mode-2 {
+  background-color: #F2F2F7 !important;
+}
+body .light-mode .bg-mode-3 {
+  background: rgba(218, 221, 231, 1);
+}
+body .light-mode .c-mode-1 {
+  color: rgba(12, 12, 13, 1) !important;
+}
+body .light-mode .c-mode-2 {
+  color: #000 !important;
+  opacity: .6;
+}
+body .light-mode .b-mode-1 {
+  border: 1px solid #ABB3C9;
+}
+body .light-mode .b-bottom-mode-1 {
+  border-bottom: 1px solid rgba(200, 200, 200, 1);
+}
+body .light-mode .c-mode-3 {
+  color: #3b3f48 !important;
+}
+body .light-mode .c-mode-3-placeholder::placeholder {
+  color: #3b3f48 !important;
+}
+body .light-mode .c-mode-4 {
+  color: #4a3f5a !important;
+}
+body .light-mode .c-mode-icon-rested, body .light-mode .c-mode-icon-rested svg {
+  color: rgba(54, 60, 77, 1) !important;
+  --svg-color: rgba(54, 60, 77, 1) !important;
+}
+body .light-mode .c-pallete-primary-primary-20 {
+  color: rgba(194, 163, 204, 1) !important;
+}
+body .light-mode .c-pallete-primary-primary-50 {
+  color: #120415;
+}
+body .light-mode .c-icon-menu-rested, body .light-mode .c-icon-menu-rested svg{
+  color: rgba(194, 163, 204, 1);
+  --svg-color: rgba(194, 163, 204, 1);
+}
+body .light-mode .bg-surface-surface-tertiary {
+  background-color: rgba(218, 221, 231, 1);
+}
+body .light-mode .bg-surface-surface-secondary {
+  background-color: rgba(242, 242, 247, 1);
+}
+body .light-mode .bg-button-rested{
+  background-color: rgba(185, 191, 213, 1);
+}
+body .light-mode .border-secondary {
+  border: 1px solid rgba(200, 200, 200, 1);
+}
+body .light-mode .b-border-mode-1{
+  border: 1px solid #000000;
+}
+body .light-mode .c-pallete-error-Error-50 {
+  color: rgba(217, 18, 78, 1) !important;
+  --svg-color: rgba(217, 18, 78, 1) !important;
+}
+body .light-mode .c-pallete-error-Error-20 {
+  color: rgba(146, 15, 55, 1) !important;
+  --svg-color: rgba(146, 15, 55, 1) !important;
+}
+body .light-mode .bg-pallete-error-Error-20 {
+  background-color: rgba(146, 15, 55, 1) !important;
+}
+body .light-mode .c-pallete-success-60 {
+  color: rgba(28, 125, 88, 1) !important;
+  --svg-color: rgba(28, 125, 88, 1) !important;
+}
+body .light-mode .bg-success-50 {
+  background: rgba(88, 189, 125, 1) !important;
+}
+body .light-mode .bg-button-primary {
+  background-color: rgba(120, 72, 95, 1);
+}
+body .light-mode .c-button-primary {
+  color: rgba(120, 72, 95, 1);
+}
+body .light-mode .c-icon-menu-active{
+  color: rgba(33, 2, 39, 1);
+  --svg-color: rgba(33, 2, 39, 1);
+}
+
+body .light-mode .bg-pallete-warning-10 {
+  background-color: #FFEDC9;
+}
+body .light-mode .b-border-primary {
+  border: 1px solid #ABB3C9;
+}
+body .light-mode .c-text-text-headeings {
+  color: rgba(33, 2, 39, 1);
+}
+body .light-mode .c-text-text-disabled {
+  color: rgba(170, 175, 187, 1);
+}
+body .light-mode .b-primary-button-rested {
+  border: 1px solid #120415;
+}
+body .light-mode .b-pallete-success-50 {
+  border: 1px solid rgba(28, 125, 88, 1);
+}
+body .light-mode .c-pallete-success-50 {
+  color: rgba(28, 125, 88, 1) !important;
+}
+body .light-mode .c-notification-warning {
+  color: rgba(252, 170, 0, 1);
+  --svg-color: rgba(252, 170, 0, 1);
+}
+body .light-mode .b-left-notification-warning {
+  border-left: 4px solid rgba(252, 170, 0, 1);
+}
+body .light-mode .c-yellow-60{
+  color: rgba(255, 212, 36, 1);
+}
+body .light-mode .c-yellow-60 svg{
+  color: rgba(255, 212, 36, 1);
+  --svg-color: rgba(255, 212, 36, 1);
+}
+body .light-mode .bg-button-secondary-button-rested{
+  background-color: rgb(199, 199, 199);
+}
+body .light-mode .list-style-mode-1 li::before {
+  content: "\2022";  /* Add content: \2022 is the CSS Code/unicode for a bullet */
+  color: #000; /* Change the color */
+  font-weight: bold; /* If you want it to be bold */
+  display: inline-block; /* Needed to add space between the bullet and the text */
+  width: 1em; /* Also needed for space (tweak if needed) */
+  margin-left: -1em; /* Also needed for space (tweak if needed) */
+}
+
+body .light-mode .form-standard {
+  border: thin solid #d8dde8;
+}
+body .light-mode .c-content,
+body .light-mode .c-content-hover:hover {
+  color: #154ec1 !important;
+}
+body .light-mode .bg-content,
+body .light-mode .bg-content-hover:hover {
+  background-color: #154ec1 !important;
+}
+body .light-mode .outline-content-focus:focus {
+  border: 1px solid #154ec1 !important;
+}
+.light-mode .b-bottom-table-line {
+  border-bottom: 1px solid #dfe5f2;
+}
+.light-mode .b-bottom-table-line-2 {
+  border-bottom: 2px solid #dfe5f2;
+}
+.light-mode .bg-edit {
+  background-color: #e9edf9;
+}
+.light-mode .bg-trash {
+  background-color: #fce9ea;
+}
+
+/*General*/
+/*.bg-mode-content{*/
+/*  background:*/
+/*          radial-gradient(circle at 20% 30%, rgba(0, 0, 0, 0.3), transparent 60%),*/
+/*          radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.05), transparent 60%),*/
+/*          linear-gradient(135deg, #0f2027, #203a43, #2c5364);*/
+/*  background-blend-mode: overlay;*/
+/*  height: 100vh;*/
+/*  margin: 0;*/
+/*}*/
+.bg-mode-content-table{
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 20px rgba(0,0,0,0.3);
+}
