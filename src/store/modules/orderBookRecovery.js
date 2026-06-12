@@ -4,6 +4,7 @@ export default {
     namespaced: true,
     state: {
         CONFIG: null,
+        OPTIONS: {exchanges: []},
         STATE: null,
         TRADES: [],
         METRICS: null,
@@ -13,8 +14,9 @@ export default {
     },
     actions: {
         async LOAD({ commit, state }) {
-            const [config, stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
+            const [config, options, stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
                 orderBookRecoveryApi.getConfig(),
+                orderBookRecoveryApi.getOptions(),
                 orderBookRecoveryApi.getState(),
                 orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
                 orderBookRecoveryApi.getMetrics(),
@@ -22,6 +24,7 @@ export default {
                 orderBookRecoveryApi.getScannerDiagnostics(),
             ]);
             if (config.data.success) commit("SET_CONFIG", config.data.obj);
+            if (options.data.success) commit("SET_OPTIONS", options.data.obj);
             if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
             if (trades.data.success) commit("SET_TRADES", trades.data.obj);
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
@@ -93,6 +96,9 @@ export default {
     mutations: {
         SET_CONFIG(state, payload) {
             state.CONFIG = payload;
+        },
+        SET_OPTIONS(state, payload) {
+            state.OPTIONS = payload || {exchanges: []};
         },
         SET_STATE(state, payload) {
             state.STATE = payload;

@@ -1,11 +1,13 @@
 <script>
 import {mapState} from "vuex";
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
+import {buildConfigPayload, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 
 export default {
   computed: {
     ...mapState({
       config: state => state.orderBookRecovery.CONFIG,
+      options: state => state.orderBookRecovery.OPTIONS,
       statePayload: state => state.orderBookRecovery.STATE,
       trades: state => state.orderBookRecovery.TRADES,
       metrics: state => state.orderBookRecovery.METRICS,
@@ -18,6 +20,15 @@ export default {
     },
     openPosition() {
       return this.statePayload?.open_position || this.metrics?.open_position || null;
+    },
+    exchangeOptions() {
+      return this.options?.exchanges || [];
+    },
+    selectedExchange() {
+      return resolveExchange(this.exchangeOptions, this.form || {});
+    },
+    pairOptions() {
+      return pairOptionsForExchange(this.exchangeOptions, this.form?.exchange_id);
     },
     exportableTradesCount() {
       return (this.trades || []).filter(trade => trade.closed_at && !trade.is_archived).length;
@@ -44,8 +55,15 @@ export default {
   watch: {
     config: {
       immediate: true,
-      handler(value) {
-        if (value && !this.form) this.form = {...value};
+      handler() {
+        this.syncFormSelection();
+      },
+    },
+    options: {
+      immediate: true,
+      deep: true,
+      handler() {
+        this.syncFormSelection();
       },
     },
   },
@@ -53,9 +71,52 @@ export default {
     load() {
       this.$store.dispatch("orderBookRecovery/LOAD");
     },
+    syncFormSelection() {
+      if (!this.config || !this.options) return;
+      const form = this.form ? {...this.form, ...this.config} : {...this.config};
+      const exchange = this.resolveExchange(form);
+      if (exchange) {
+        form.exchange_id = exchange.id;
+        form.exchange = exchange.title;
+      }
+      const pair = this.resolvePair(exchange, form);
+      if (pair) {
+        form.trading_pair_id = pair.id;
+        form.symbol = pair.pair;
+      }
+      this.form = form;
+    },
+    resolveExchange(form) {
+      return resolveExchange(this.exchangeOptions, form);
+    },
+    resolvePair(exchange, form) {
+      return resolvePair(exchange, form);
+    },
+    onExchangeChange() {
+      const exchange = this.selectedExchange;
+      this.form.exchange = exchange?.title || "";
+      this.form.trading_pair_id = null;
+      this.form.symbol = "";
+      if ((exchange?.pairs || []).length === 1) {
+        this.form.trading_pair_id = exchange.pairs[0].id;
+        this.form.symbol = exchange.pairs[0].pair;
+      }
+    },
+    onPairChange() {
+      const pair = this.pairOptions.find(item => Number(item.id) === Number(this.form?.trading_pair_id));
+      this.form.symbol = pair?.pair || "";
+    },
     saveConfig() {
+      if (!this.form?.exchange_id) {
+        this.emitter.emit("toster", {success: false, msg: "Select exchange"});
+        return;
+      }
+      if (!this.form?.trading_pair_id) {
+        this.emitter.emit("toster", {success: false, msg: "Select trading pair"});
+        return;
+      }
       this.emitter.emit("loader", true);
-      this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", this.form).then(res => {
+      this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form)).then(res => {
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Config saved" : getResponseMessage(res),
@@ -241,8 +302,18 @@ export default {
         <span>{{ form.paper_mode_only ? 'paper mode only' : 'invalid mode' }}</span>
       </div>
       <div class="recovery-form">
-        <label>Exchange<input v-model="form.exchange"/></label>
-        <label>Symbol<input v-model="form.symbol"/></label>
+        <label>Exchange
+          <select v-model.number="form.exchange_id" @change="onExchangeChange">
+            <option :value="null" disabled>Select exchange</option>
+            <option v-for="exchange in exchangeOptions" :key="exchange.id" :value="exchange.id">{{ exchange.title }}</option>
+          </select>
+        </label>
+        <label>Symbol
+          <select v-model.number="form.trading_pair_id" :disabled="!form.exchange_id || !pairOptions.length" @change="onPairChange">
+            <option :value="null" disabled>{{ form.exchange_id && !pairOptions.length ? 'No active trading pairs for this exchange' : 'Select pair' }}</option>
+            <option v-for="pair in pairOptions" :key="pair.id" :value="pair.id">{{ pair.pair }}</option>
+          </select>
+        </label>
         <label>Base margin<input v-model.number="form.base_margin_usdt" type="number"/></label>
         <label>Leverage<input v-model.number="form.leverage" type="number"/></label>
         <label>Max recovery steps<input v-model.number="form.max_recovery_steps" type="number"/></label>
@@ -629,6 +700,7 @@ label{
   font-size: 12px;
 }
 input,
+select,
 button{
   min-height: 40px;
   border-radius: 8px;

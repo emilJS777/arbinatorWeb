@@ -5,6 +5,9 @@ export default {
     getConfig() {
         return apiClient.get("/orderbook-recovery/config");
     },
+    getOptions() {
+        return apiClient.get("/orderbook-recovery/options");
+    },
     updateConfig(body) {
         return apiClient.patch("/orderbook-recovery/config", body);
     },
