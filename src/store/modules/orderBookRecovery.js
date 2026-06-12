@@ -1,4 +1,5 @@
 import orderBookRecoveryApi from "@/api/orderBookRecovery.js";
+import {normalizeConfigForm} from "@/utils/orderBookRecoveryConfig.js";
 
 export default {
     namespaced: true,
@@ -105,7 +106,7 @@ export default {
     },
     mutations: {
         SET_CONFIG(state, payload) {
-            state.CONFIG = payload;
+            state.CONFIG = payload ? normalizeConfigForm(payload) : payload;
         },
         SET_OPTIONS(state, payload) {
             state.OPTIONS = payload || {exchanges: []};

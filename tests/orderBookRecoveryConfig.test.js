@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildConfigPayload, pairOptionsForExchange, resolveExchange, resolvePair} from '../src/utils/orderBookRecoveryConfig.js';
+import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from '../src/utils/orderBookRecoveryConfig.js';
 
 const options = [
   {
@@ -42,4 +42,39 @@ test('save payload sends exchange_id and trading_pair_id', () => {
   assert.equal(payload.exchange_id, 13);
   assert.equal(payload.trading_pair_id, 101);
   assert.equal(payload.base_margin_usdt, 7);
+});
+
+test('live config fields have defaults for UI binding', () => {
+  const form = normalizeConfigForm({});
+  assert.equal(form.execution_mode, 'paper');
+  assert.equal(form.live_enabled_confirmation, false);
+  assert.equal(form.live_kill_switch, true);
+  assert.equal(form.live_max_margin_usdt, 10);
+  assert.equal(form.live_max_daily_loss_usdt, 5);
+  assert.equal(form.live_max_total_loss_usdt, 10);
+  assert.equal(form.live_order_type, 'market');
+  assert.equal(form.live_open_failed_cooldown_seconds, 60);
+});
+
+test('save payload preserves live config fields', () => {
+  const payload = buildConfigPayload({
+    exchange_id: '13',
+    trading_pair_id: '101',
+    execution_mode: 'live',
+    live_enabled_confirmation: true,
+    live_kill_switch: false,
+    live_max_margin_usdt: '9',
+    live_max_daily_loss_usdt: '4',
+    live_max_total_loss_usdt: '8',
+    live_order_type: 'market',
+    live_open_failed_cooldown_seconds: '45',
+  });
+  assert.equal(payload.execution_mode, 'live');
+  assert.equal(payload.live_enabled_confirmation, true);
+  assert.equal(payload.live_kill_switch, false);
+  assert.equal(payload.live_max_margin_usdt, 9);
+  assert.equal(payload.live_max_daily_loss_usdt, 4);
+  assert.equal(payload.live_max_total_loss_usdt, 8);
+  assert.equal(payload.live_order_type, 'market');
+  assert.equal(payload.live_open_failed_cooldown_seconds, 45);
 });

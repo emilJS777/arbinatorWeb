@@ -1,7 +1,7 @@
 <script>
 import {mapState} from "vuex";
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
-import {buildConfigPayload, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
+import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 
 export default {
   computed: {
@@ -73,7 +73,7 @@ export default {
     },
     syncFormSelection() {
       if (!this.config || !this.options) return;
-      const form = this.form ? {...this.form, ...this.config} : {...this.config};
+      const form = normalizeConfigForm(this.form ? {...this.form, ...this.config} : {...this.config});
       const exchange = this.resolveExchange(form);
       if (exchange) {
         form.exchange_id = exchange.id;
@@ -124,11 +124,14 @@ export default {
       }).finally(() => this.emitter.emit("loader", false));
     },
     start() {
+      if ((this.form?.execution_mode || this.config?.execution_mode) === "live") {
+        if (!window.confirm("You are enabling LIVE trading. Real orders may be placed on the exchange.")) return;
+      }
       this.emitter.emit("loader", true);
       this.$store.dispatch("orderBookRecovery/START").then(res => {
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
-          msg: isResponseSuccess(res) ? "Paper strategy started" : getResponseMessage(res),
+          msg: isResponseSuccess(res) ? "Strategy started" : getResponseMessage(res),
         });
         this.$store.dispatch("orderBookRecovery/LOAD");
       }).finally(() => this.emitter.emit("loader", false));
@@ -318,9 +321,30 @@ export default {
     <section class="recovery-section" v-if="form">
       <div class="section-title">
         <h3>Config</h3>
-        <span>{{ form.paper_mode_only ? 'paper mode only' : 'invalid mode' }}</span>
+        <span :class="['mode-badge', form.execution_mode === 'live' ? 'live' : 'paper']">{{ (form.execution_mode || 'paper').toUpperCase() }}</span>
       </div>
       <div class="recovery-form">
+        <label>Execution mode
+          <select v-model="form.execution_mode">
+            <option value="paper">Paper</option>
+            <option value="live">Live</option>
+          </select>
+        </label>
+        <template v-if="form.execution_mode === 'live'">
+          <div class="live-warning">WARNING: Live mode places real orders on the selected exchange.</div>
+          <label class="check-row"><input v-model="form.live_enabled_confirmation" type="checkbox"/> Live enabled confirmation</label>
+          <label class="check-row"><input v-model="form.live_kill_switch" type="checkbox"/> Live kill switch</label>
+          <label>Live max margin USDT<input v-model.number="form.live_max_margin_usdt" type="number" step="0.1"/></label>
+          <label>Live max daily loss<input v-model.number="form.live_max_daily_loss_usdt" type="number" step="0.1"/></label>
+          <label>Live max total loss<input v-model.number="form.live_max_total_loss_usdt" type="number" step="0.1"/></label>
+          <label>Live open failed cooldown sec<input v-model.number="form.live_open_failed_cooldown_seconds" type="number" min="0" step="1"/></label>
+          <label>Live order type
+            <select v-model="form.live_order_type">
+              <option value="market">Market</option>
+            </select>
+          </label>
+          <label class="check-row"><input v-model="form.live_reduce_only_close" type="checkbox"/> Reduce-only close</label>
+        </template>
         <label>Exchange
           <select v-model.number="form.exchange_id" @change="onExchangeChange">
             <option :value="null" disabled>Select exchange</option>
@@ -354,6 +378,20 @@ export default {
         <label>Max snapshot age sec<input v-model.number="form.max_snapshot_age_seconds" type="number" step="0.5"/></label>
         <label>Anomaly min<input v-model.number="form.imbalance_anomaly_min" type="number" step="0.01"/></label>
         <label>Anomaly max<input v-model.number="form.imbalance_anomaly_max" type="number" step="0.1"/></label>
+        <label>Entry mode
+          <select v-model="form.entry_mode">
+            <option value="instant">Instant</option>
+            <option value="two_step_confirmation">Two-step confirmation</option>
+          </select>
+        </label>
+        <template v-if="form.entry_mode === 'two_step_confirmation'">
+          <label>Confirmation delay sec<input v-model.number="form.confirmation_delay_seconds" type="number" step="0.5"/></label>
+          <label>Confirmation max wait sec<input v-model.number="form.confirmation_max_wait_seconds" type="number" step="0.5"/></label>
+          <label>Min momentum delta<input v-model.number="form.confirmation_min_momentum_delta" type="number" step="0.000001"/></label>
+          <label class="check-row"><input v-model="form.confirmation_require_same_direction" type="checkbox"/> Require same direction</label>
+          <label class="check-row"><input v-model="form.confirmation_require_momentum_improvement" type="checkbox"/> Require momentum improvement</label>
+          <label class="check-row"><input v-model="form.confirmation_require_consensus_still_valid" type="checkbox"/> Require consensus still valid</label>
+        </template>
         <label>Max recovery cooldown sec<input v-model.number="form.cooldown_after_max_recovery_seconds" type="number"/></label>
         <label>Feedback lookback<input v-model.number="form.feedback_lookback_trades" type="number"/></label>
         <label>Side loss streak limit<input v-model.number="form.side_loss_streak_limit" type="number"/></label>
@@ -425,6 +463,11 @@ export default {
         <div><span>Last decision</span><strong>{{ debug?.last_evaluation?.last_decision || statePayload?.last_evaluation?.last_decision || 'none' }}</strong></div>
         <div><span>Reject reason</span><strong>{{ debug?.last_evaluation?.reject_reason || '-' }}</strong></div>
         <div><span>Entry blocked</span><strong>{{ debug?.entry_blocked_reason || '-' }}</strong></div>
+        <div><span>Entry mode</span><strong>{{ debug?.entry_mode || config?.entry_mode || 'instant' }}</strong></div>
+        <div><span>Resolved live symbol</span><strong>{{ debug?.resolved_live_symbol || statePayload?.live_market?.resolved_live_symbol || '-' }}</strong></div>
+        <div><span>Live market type</span><strong>{{ debug?.live_market_type || statePayload?.live_market?.live_market_type || '-' }}</strong></div>
+        <div><span>Live market valid</span><strong>{{ debug?.live_market_valid ? 'true' : 'false' }}</strong></div>
+        <div><span>Live market error</span><strong>{{ debug?.live_market_error || statePayload?.live_market?.live_market_error || '-' }}</strong></div>
         <div><span>Bid top 5</span><strong>{{ fmt(debug?.last_evaluation?.bid_volume_top_5, 2) }}</strong></div>
         <div><span>Ask top 5</span><strong>{{ fmt(debug?.last_evaluation?.ask_volume_top_5, 2) }}</strong></div>
         <div><span>Imbalance</span><strong>{{ fmt(debug?.last_evaluation?.imbalance, 4) }}</strong></div>
@@ -441,6 +484,24 @@ export default {
         <div><span>Avg momentum</span><strong>{{ fmt(debug?.average_momentum, 8) }}</strong></div>
         <div><span>Anomalous exchanges</span><strong>{{ debug?.anomalous_exchanges_count ?? 0 }}</strong></div>
         <div><span>Excluded anomalies</span><strong>{{ (debug?.excluded_anomalous_imbalance_exchanges || []).join(', ') || '-' }}</strong></div>
+      </div>
+    </section>
+
+    <section class="recovery-section">
+      <h3>Pending Entry</h3>
+      <div class="metric-grid">
+        <div><span>Exists</span><strong>{{ debug?.pending_entry_exists ? 'yes' : 'no' }}</strong></div>
+        <div><span>Side</span><strong>{{ debug?.pending_entry_side || '-' }}</strong></div>
+        <div><span>Age</span><strong>{{ fmt(debug?.pending_entry_age_seconds, 2) }} sec</strong></div>
+        <div><span>Expires in</span><strong>{{ fmt(debug?.pending_entry_expires_in_seconds, 2) }} sec</strong></div>
+        <div><span>Created at</span><strong>{{ dt(debug?.pending_entry_created_at) }}</strong></div>
+        <div><span>Expires at</span><strong>{{ dt(debug?.pending_entry_expires_at) }}</strong></div>
+        <div><span>First momentum</span><strong>{{ fmt(debug?.pending_entry_first_momentum, 8) }}</strong></div>
+        <div><span>Current momentum</span><strong>{{ fmt(debug?.pending_entry_current_momentum, 8) }}</strong></div>
+        <div><span>First consensus</span><strong>{{ debug?.pending_entry_first_consensus || '-' }}</strong></div>
+        <div><span>Current consensus</span><strong>{{ debug?.pending_entry_current_consensus || '-' }}</strong></div>
+        <div><span>Status</span><strong>{{ debug?.pending_entry_status || '-' }}</strong></div>
+        <div><span>Reject reason</span><strong>{{ debug?.last_confirmation_reject_reason || '-' }}</strong></div>
       </div>
     </section>
 
@@ -509,7 +570,7 @@ export default {
           <span>{{ fmt(openPosition.entry_price, 4) }}</span>
           <span>{{ fmt(openPosition.pnl, 4) }}</span>
         </div>
-        <div class="empty-row" v-else>No open paper position</div>
+        <div class="empty-row" v-else>No open position</div>
       </div>
       <div class="action-row" v-if="openPosition">
         <button class="button-danger" @click="closePosition"><i class="fa-solid fa-xmark"></i> Close Position</button>
@@ -533,9 +594,10 @@ export default {
         <div><span>Gross loss</span><strong>{{ fmt(metrics?.gross_loss, 2) }} USDT</strong></div>
       </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Result</span><span>Close reason</span><span>Archived</span><span>Action</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
         <div class="recovery-row recovery-row--trades" v-for="trade in trades" :key="trade.id">
           <span>{{ trade.id }}</span>
+          <span>{{ trade.execution_mode || 'paper' }}</span>
           <span>{{ trade.side }}</span>
           <span>{{ trade.recovery_step }}</span>
           <span>{{ fmt(trade.margin, 2) }}</span>
@@ -545,9 +607,10 @@ export default {
             <strong>{{ moneyResult(trade.pnl) }}</strong>
             <small>{{ pnlLabel(trade) }}</small>
           </span>
-          <span :class="['result-pill', trade.result || 'open']">{{ trade.result || 'open' }}</span>
-          <span>{{ trade.reason_close || '-' }}</span>
-          <span>{{ trade.is_archived ? 'yes' : 'no' }}</span>
+          <span :class="['result-pill', trade.live_status || trade.result || 'open']">{{ trade.live_status || trade.result || 'open' }}</span>
+          <span>{{ trade.live_exchange_order_id || '-' }}</span>
+          <span>{{ fmt((trade.live_entry_fee || 0) + (trade.live_exit_fee || 0), 4) }}</span>
+          <span>{{ trade.live_error || '-' }}</span>
           <span class="trade-actions">
             <button @click="viewDetails(trade)">View Details</button>
             <button v-if="trade.closed_at && !trade.is_archived" @click="archiveTrade(trade)">Archive</button>
@@ -725,6 +788,27 @@ export default {
   font-size: 12px;
   text-transform: uppercase;
 }
+.mode-badge{
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.mode-badge.paper{
+  color: #8fdfe0;
+  background: rgba(70,205,207,.12);
+}
+.mode-badge.live{
+  color: #ffb5b5;
+  background: rgba(255,107,107,.14);
+}
+.live-warning{
+  grid-column: 1 / -1;
+  padding: 12px;
+  border-radius: 8px;
+  color: #ffb5b5;
+  background: rgba(255,107,107,.12);
+  border: 1px solid rgba(255,107,107,.24);
+  font-weight: 800;
+}
 .recovery-form{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -809,7 +893,8 @@ button{
   background: rgba(255,255,255,.04);
 }
 .recovery-row--trades{
-  grid-template-columns: .5fr repeat(10, minmax(0, 1fr));
+  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr 1fr .7fr 1.2fr 1.1fr;
+  min-width: 1320px;
 }
 .trade-actions{
   display: flex;
