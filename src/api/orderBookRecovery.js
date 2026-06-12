@@ -26,6 +26,9 @@ export default {
     getDebug() {
         return apiClient.get("/orderbook-recovery/debug");
     },
+    getScannerDiagnostics() {
+        return apiClient.get("/scanner/diagnostics");
+    },
     closeManual(positionId) {
         return apiClient.post(`/orderbook-recovery/positions/${positionId}/close-manual`, {
             reason: "manual_close",

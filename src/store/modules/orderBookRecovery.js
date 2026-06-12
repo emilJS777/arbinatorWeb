@@ -8,35 +8,40 @@ export default {
         TRADES: [],
         METRICS: null,
         DEBUG: null,
+        SCANNER_DIAGNOSTICS: [],
         SHOW_ARCHIVED: false,
     },
     actions: {
         async LOAD({ commit, state }) {
-            const [config, stateResponse, trades, metrics, debug] = await Promise.all([
+            const [config, stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
                 orderBookRecoveryApi.getConfig(),
                 orderBookRecoveryApi.getState(),
                 orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
                 orderBookRecoveryApi.getMetrics(),
                 orderBookRecoveryApi.getDebug(),
+                orderBookRecoveryApi.getScannerDiagnostics(),
             ]);
             if (config.data.success) commit("SET_CONFIG", config.data.obj);
             if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
             if (trades.data.success) commit("SET_TRADES", trades.data.obj);
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
             if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
+            if (diagnostics.data.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
             return stateResponse;
         },
         async LOAD_DEBUG({ commit, state }) {
-            const [stateResponse, trades, metrics, debug] = await Promise.all([
+            const [stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
                 orderBookRecoveryApi.getState(),
                 orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
                 orderBookRecoveryApi.getMetrics(),
                 orderBookRecoveryApi.getDebug(),
+                orderBookRecoveryApi.getScannerDiagnostics(),
             ]);
             if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
             if (trades.data.success) commit("SET_TRADES", trades.data.obj);
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
             if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
+            if (diagnostics.data.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
             return debug;
         },
         async SAVE_CONFIG({ commit }, body) {
@@ -100,6 +105,9 @@ export default {
         },
         SET_DEBUG(state, payload) {
             state.DEBUG = payload;
+        },
+        SET_SCANNER_DIAGNOSTICS(state, payload) {
+            state.SCANNER_DIAGNOSTICS = payload || [];
         },
         SET_SHOW_ARCHIVED(state, payload) {
             state.SHOW_ARCHIVED = Boolean(payload);

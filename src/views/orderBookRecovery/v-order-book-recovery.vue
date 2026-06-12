@@ -10,6 +10,7 @@ export default {
       trades: state => state.orderBookRecovery.TRADES,
       metrics: state => state.orderBookRecovery.METRICS,
       debug: state => state.orderBookRecovery.DEBUG,
+      scannerDiagnostics: state => state.orderBookRecovery.SCANNER_DIAGNOSTICS,
       showArchived: state => state.orderBookRecovery.SHOW_ARCHIVED,
     }),
     recoveryState() {
@@ -101,6 +102,11 @@ export default {
     },
     dt(value) {
       return value ? new Date(value).toLocaleString() : "-";
+    },
+    scannerStatusTone(status) {
+      if (["active", "waiting"].includes(status)) return "positive";
+      if (["cooldown", "timeout", "failed"].includes(status)) return "negative";
+      return "neutral";
     },
     metricTone(value) {
       const number = Number(value || 0);
@@ -370,6 +376,25 @@ export default {
           <span>{{ row.reject_reason || '-' }}</span>
         </div>
         <div class="empty-row" v-if="!(debug?.per_exchange_features || []).length">No consensus snapshots yet</div>
+      </div>
+    </section>
+
+    <section class="recovery-section">
+      <h3>Scanner Diagnostics</h3>
+      <div class="recovery-table">
+        <div class="recovery-row recovery-row--head recovery-row--scanner"><span>Exchange</span><span>Symbol</span><span>Status</span><span>Latency</span><span>Stale sec</span><span>Last success</span><span>Last error</span><span>Error</span><span>Cooldown</span></div>
+        <div class="recovery-row recovery-row--scanner" v-for="row in scannerDiagnostics" :key="`${row.exchange}-${row.symbol}`">
+          <span>{{ row.exchange }}</span>
+          <span>{{ row.symbol }}</span>
+          <span :class="['result-pill', scannerStatusTone(row.status)]">{{ row.status || '-' }}</span>
+          <span>{{ fmt(row.latency_ms, 1) }} ms</span>
+          <span>{{ fmt(row.stale_seconds, 2) }}</span>
+          <span>{{ dt(row.last_success_at) }}</span>
+          <span>{{ dt(row.last_error_at) }}</span>
+          <span>{{ row.error_message || '-' }}</span>
+          <span>{{ dt(row.cooldown_until) }}</span>
+        </div>
+        <div class="empty-row" v-if="!scannerDiagnostics.length">No scanner diagnostics yet</div>
       </div>
     </section>
 
@@ -752,6 +777,10 @@ button{
 }
 .result-pill.open{
   color: #d7deef;
+}
+.recovery-row--scanner{
+  grid-template-columns: minmax(95px, .9fr) minmax(95px, .9fr) minmax(85px, .8fr) minmax(80px, .7fr) minmax(80px, .7fr) minmax(150px, 1.2fr) minmax(150px, 1.2fr) minmax(180px, 1.4fr) minmax(150px, 1.2fr);
+  min-width: 1120px;
 }
 .recovery-row--consensus{
   grid-template-columns: repeat(8, minmax(0, 1fr));
