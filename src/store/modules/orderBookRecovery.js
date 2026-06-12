@@ -76,6 +76,16 @@ export default {
             await dispatch("LOAD");
             return res;
         },
+        async DELETE_ARCHIVED_TRADE({ dispatch }, tradeId) {
+            const res = await orderBookRecoveryApi.deleteArchivedTrade(tradeId);
+            await dispatch("LOAD");
+            return res;
+        },
+        async DELETE_ALL_ARCHIVED_TRADES({ dispatch }) {
+            const res = await orderBookRecoveryApi.deleteAllArchivedTrades();
+            await dispatch("LOAD");
+            return res;
+        },
         async ARCHIVE_ALL_CLOSED({ dispatch }) {
             const res = await orderBookRecoveryApi.archiveAllClosed();
             await dispatch("LOAD");

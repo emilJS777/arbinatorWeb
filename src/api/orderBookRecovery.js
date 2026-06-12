@@ -42,6 +42,12 @@ export default {
             reason: "manual_archive",
         });
     },
+    deleteArchivedTrade(tradeId) {
+        return apiClient.post(`/orderbook-recovery/trades/${tradeId}/delete-archived`, {});
+    },
+    deleteAllArchivedTrades() {
+        return apiClient.post("/orderbook-recovery/trades/delete-all-archived", {});
+    },
     archiveAllClosed() {
         return apiClient.post("/orderbook-recovery/trades/archive-all-closed", {
             reason: "archive_all_closed",

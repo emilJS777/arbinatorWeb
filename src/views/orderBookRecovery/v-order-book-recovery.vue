@@ -200,6 +200,25 @@ export default {
         });
       });
     },
+    deleteArchivedTrade(trade) {
+      if (!trade?.is_archived) return;
+      if (!window.confirm("Delete archived trade permanently?")) return;
+      this.$store.dispatch("orderBookRecovery/DELETE_ARCHIVED_TRADE", trade.id).then(res => {
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "Archived trade deleted" : getResponseMessage(res),
+        });
+      });
+    },
+    deleteAllArchivedTrades() {
+      if (!window.confirm("Delete all archived trades permanently?")) return;
+      this.$store.dispatch("orderBookRecovery/DELETE_ALL_ARCHIVED_TRADES").then(res => {
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "Archived trades deleted" : getResponseMessage(res),
+        });
+      });
+    },
     archiveAllClosed() {
       this.$store.dispatch("orderBookRecovery/ARCHIVE_ALL_CLOSED").then(res => {
         this.emitter.emit("toster", {
@@ -333,6 +352,8 @@ export default {
         <label>Min confirming exchanges<input v-model.number="form.min_confirming_exchanges" type="number"/></label>
         <label>Min consensus ratio<input v-model.number="form.min_consensus_ratio" type="number" step="0.01"/></label>
         <label>Max snapshot age sec<input v-model.number="form.max_snapshot_age_seconds" type="number" step="0.5"/></label>
+        <label>Anomaly min<input v-model.number="form.imbalance_anomaly_min" type="number" step="0.01"/></label>
+        <label>Anomaly max<input v-model.number="form.imbalance_anomaly_max" type="number" step="0.1"/></label>
         <label>Max recovery cooldown sec<input v-model.number="form.cooldown_after_max_recovery_seconds" type="number"/></label>
         <label>Feedback lookback<input v-model.number="form.feedback_lookback_trades" type="number"/></label>
         <label>Side loss streak limit<input v-model.number="form.side_loss_streak_limit" type="number"/></label>
@@ -342,6 +363,8 @@ export default {
         <label>Adaptive valid exchanges boost<input v-model.number="form.adaptive_min_valid_exchanges_boost" type="number"/></label>
         <label>Paper equity<input v-model.number="form.paper_equity_usdt" type="number"/></label>
         <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/> Consensus enabled</label>
+        <label class="check-row"><input v-model="form.use_median_imbalance" type="checkbox"/> Use median imbalance</label>
+        <label class="check-row"><input v-model="form.exclude_anomalous_imbalance" type="checkbox"/> Exclude imbalance anomalies</label>
         <label class="check-row"><input v-model="form.feedback_enabled" type="checkbox"/> Feedback enabled</label>
         <label class="check-row"><input v-model="form.require_configured_exchange_signal" type="checkbox"/> Require configured signal</label>
         <label class="check-row"><input v-model="form.enabled" type="checkbox"/> Enabled</label>
@@ -412,8 +435,12 @@ export default {
         <div><span>Valid exchanges</span><strong>{{ debug?.valid_exchanges_count ?? 0 }}</strong></div>
         <div><span>Long consensus</span><strong>{{ debug?.confirming_long_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_long, 2) }}</strong></div>
         <div><span>Short consensus</span><strong>{{ debug?.confirming_short_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_short, 2) }}</strong></div>
+        <div><span>Median imbalance</span><strong>{{ fmt(debug?.median_imbalance, 4) }}</strong></div>
+        <div><span>Raw avg imbalance</span><strong>{{ fmt(debug?.raw_average_imbalance, 4) }}</strong></div>
         <div><span>Avg imbalance</span><strong>{{ fmt(debug?.average_imbalance, 4) }}</strong></div>
         <div><span>Avg momentum</span><strong>{{ fmt(debug?.average_momentum, 8) }}</strong></div>
+        <div><span>Anomalous exchanges</span><strong>{{ debug?.anomalous_exchanges_count ?? 0 }}</strong></div>
+        <div><span>Excluded anomalies</span><strong>{{ (debug?.excluded_anomalous_imbalance_exchanges || []).join(', ') || '-' }}</strong></div>
       </div>
     </section>
 
@@ -435,11 +462,13 @@ export default {
     <section class="recovery-section">
       <h3>Multi-exchange consensus</h3>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--consensus"><span>Exchange</span><span>Valid</span><span>Imbalance</span><span>Spread %</span><span>Momentum</span><span>Long</span><span>Short</span><span>Reject reason</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--consensus"><span>Exchange</span><span>Valid</span><span>Imbalance</span><span>Raw imbalance</span><span>Anomaly</span><span>Spread %</span><span>Momentum</span><span>Long</span><span>Short</span><span>Reject reason</span></div>
         <div class="recovery-row recovery-row--consensus" v-for="row in (debug?.per_exchange_features || [])" :key="`${row.exchange}-${row.symbol}`">
           <span>{{ row.exchange }}</span>
           <span>{{ row.valid ? 'yes' : 'no' }}</span>
           <span>{{ fmt(row.imbalance, 4) }}</span>
+          <span>{{ fmt(row.raw_imbalance, 4) }}</span>
+          <span>{{ row.is_imbalance_anomaly ? 'yes' : 'no' }}</span>
           <span>{{ fmt(row.spread_percent, 4) }}</span>
           <span>{{ fmt(row.momentum, 8) }}</span>
           <span>{{ row.long_signal ? 'yes' : 'no' }}</span>
@@ -495,6 +524,7 @@ export default {
         <button @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> Export JSON</button>
         <button @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> Archive all closed trades</button>
         <button @click="unarchiveAll"><i class="fa-solid fa-rotate-left"></i> Unarchive all</button>
+        <button class="button-danger" @click="deleteAllArchivedTrades"><i class="fa-solid fa-trash"></i> Delete all archived trades</button>
       </div>
       <div class="metric-grid">
         <div><span>Archived trades</span><strong>{{ metrics?.archived_trades_count ?? 0 }}</strong></div>
@@ -521,6 +551,7 @@ export default {
           <span class="trade-actions">
             <button @click="viewDetails(trade)">View Details</button>
             <button v-if="trade.closed_at && !trade.is_archived" @click="archiveTrade(trade)">Archive</button>
+            <button v-if="trade.is_archived" class="button-danger" @click="deleteArchivedTrade(trade)">Delete</button>
           </span>
         </div>
       </div>
@@ -566,8 +597,12 @@ export default {
             <div><span>Short confirms</span><strong>{{ detail('consensus.confirming_short_count') }}</strong></div>
             <div><span>Long ratio</span><strong>{{ fmt(detail('consensus.consensus_ratio_long', 0), 3) }}</strong></div>
             <div><span>Short ratio</span><strong>{{ fmt(detail('consensus.consensus_ratio_short', 0), 3) }}</strong></div>
+            <div><span>Median imbalance</span><strong>{{ fmt(detail('consensus.median_imbalance', 0), 4) }}</strong></div>
+            <div><span>Raw avg imbalance</span><strong>{{ fmt(detail('consensus.raw_average_imbalance', 0), 4) }}</strong></div>
             <div><span>Avg imbalance</span><strong>{{ fmt(detail('consensus.average_imbalance', 0), 4) }}</strong></div>
             <div><span>Avg momentum</span><strong>{{ fmt(detail('consensus.average_momentum', 0), 8) }}</strong></div>
+            <div><span>Anomalies</span><strong>{{ detail('consensus.anomalous_exchanges_count') }}</strong></div>
+            <div><span>Excluded</span><strong>{{ (detail('consensus.excluded_anomalous_imbalance_exchanges') || []).join(', ') || '-' }}</strong></div>
           </div>
         </div>
 
@@ -593,13 +628,15 @@ export default {
         <div class="detail-block">
           <h4>Per-exchange order book</h4>
           <div class="recovery-table">
-            <div class="recovery-row recovery-row--details recovery-row--head"><span>Exchange</span><span>Symbol</span><span>Bid top 5</span><span>Ask top 5</span><span>Imbalance</span><span>Spread %</span><span>Momentum</span><span>Age</span><span>Valid</span><span>Long</span><span>Short</span><span>Reject</span></div>
+            <div class="recovery-row recovery-row--details recovery-row--head"><span>Exchange</span><span>Symbol</span><span>Bid top 5</span><span>Ask top 5</span><span>Imbalance</span><span>Raw</span><span>Anomaly</span><span>Spread %</span><span>Momentum</span><span>Age</span><span>Valid</span><span>Long</span><span>Short</span><span>Reject</span></div>
             <div class="recovery-row recovery-row--details" v-for="row in decisionDetails.per_exchange_features" :key="`${row.exchange}-${row.symbol}`">
               <span>{{ row.exchange }}</span>
               <span>{{ row.symbol }}</span>
               <span>{{ fmt(row.bid_volume_top_5, 2) }}</span>
               <span>{{ fmt(row.ask_volume_top_5, 2) }}</span>
               <span>{{ fmt(row.imbalance, 4) }}</span>
+              <span>{{ fmt(row.raw_imbalance, 4) }}</span>
+              <span>{{ row.is_imbalance_anomaly ? 'yes' : 'no' }}</span>
               <span>{{ fmt(row.spread_percent, 4) }}</span>
               <span>{{ fmt(row.momentum, 8) }}</span>
               <span>{{ fmt(row.snapshot_age_seconds, 2) }}</span>
@@ -816,8 +853,8 @@ button{
   color: #fff;
 }
 .recovery-row--details{
-  grid-template-columns: repeat(12, minmax(90px, 1fr));
-  min-width: 1080px;
+  grid-template-columns: repeat(14, minmax(90px, 1fr));
+  min-width: 1260px;
 }
 .pnl-badge{
   display: grid;
@@ -855,7 +892,8 @@ button{
   min-width: 1120px;
 }
 .recovery-row--consensus{
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  min-width: 980px;
 }
 .empty-row{
   color: #90a0be;
