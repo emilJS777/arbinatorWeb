@@ -29,6 +29,9 @@ export default {
     getDebug() {
         return apiClient.get("/orderbook-recovery/debug");
     },
+    clearDiagnostics() {
+        return apiClient.post("/orderbook-recovery/diagnostics/clear", {});
+    },
     getScannerDiagnostics() {
         return apiClient.get("/scanner/diagnostics");
     },

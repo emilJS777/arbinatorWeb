@@ -33,6 +33,7 @@ export const configDefaults = {
     live_order_type: "market",
     live_reduce_only_close: true,
     live_open_failed_cooldown_seconds: 60,
+    signal_diagnostics_max_rows: 100,
 };
 
 export const normalizeConfigForm = (form = {}) => ({
@@ -47,6 +48,7 @@ export const normalizeConfigForm = (form = {}) => ({
     live_max_total_loss_usdt: Number(form.live_max_total_loss_usdt ?? configDefaults.live_max_total_loss_usdt),
     live_order_type: form.live_order_type || configDefaults.live_order_type,
     live_open_failed_cooldown_seconds: Number(form.live_open_failed_cooldown_seconds ?? configDefaults.live_open_failed_cooldown_seconds),
+    signal_diagnostics_max_rows: Math.min(500, Math.max(20, Number(form.signal_diagnostics_max_rows ?? configDefaults.signal_diagnostics_max_rows))),
 });
 
 export const buildConfigPayload = (form = {}) => ({

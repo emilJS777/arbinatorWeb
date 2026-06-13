@@ -63,6 +63,11 @@ export default {
             await dispatch("LOAD");
             return res;
         },
+        async CLEAR_DIAGNOSTICS({ dispatch }) {
+            const res = await orderBookRecoveryApi.clearDiagnostics();
+            await dispatch("LOAD_DEBUG");
+            return res;
+        },
         async CLOSE_MANUAL({ dispatch }, positionId) {
             const res = await orderBookRecoveryApi.closeManual(positionId);
             await dispatch("LOAD");

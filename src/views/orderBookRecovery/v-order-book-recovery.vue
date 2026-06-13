@@ -341,6 +341,14 @@ export default {
     closeDetails() {
       this.decisionDetails = null;
     },
+    clearDiagnostics() {
+      this.$store.dispatch("orderBookRecovery/CLEAR_DIAGNOSTICS").then(res => {
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "Signal diagnostics cleared" : getResponseMessage(res),
+        });
+      });
+    },
     exportTrades(format = "csv") {
       if (!this.exportableTradesCount) {
         this.emitter.emit("toster", {success: false, msg: "No non-archived closed trades to export"});
@@ -490,6 +498,7 @@ export default {
         <label>Min side win rate<input v-model.number="form.min_side_win_rate" type="number" step="1"/></label>
         <label>Adaptive consensus boost<input v-model.number="form.adaptive_consensus_boost" type="number" step="0.01"/></label>
         <label>Adaptive valid exchanges boost<input v-model.number="form.adaptive_min_valid_exchanges_boost" type="number"/></label>
+        <label>Signal diagnostics max rows<input v-model.number="form.signal_diagnostics_max_rows" type="number" min="20" max="500" step="1"/></label>
         <label>Paper equity<input v-model.number="form.paper_equity_usdt" type="number"/></label>
         <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/> Consensus enabled</label>
         <label class="check-row"><input v-model="form.use_median_imbalance" type="checkbox"/> Use median imbalance</label>
@@ -612,12 +621,16 @@ export default {
     </section>
 
     <section class="recovery-section">
-      <h3>Signal Diagnostics</h3>
+      <div class="section-title">
+        <h3>Signal Diagnostics</h3>
+        <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i> Clear diagnostics</button>
+      </div>
       <div class="metric-grid">
         <div><span>Long signals</span><strong>{{ debug?.long_signals_count ?? 0 }}</strong></div>
         <div><span>Short signals</span><strong>{{ debug?.short_signals_count ?? 0 }}</strong></div>
         <div><span>Long opened</span><strong>{{ debug?.long_opened_count ?? 0 }}</strong></div>
         <div><span>Short opened</span><strong>{{ debug?.short_opened_count ?? 0 }}</strong></div>
+        <div><span>Max rows</span><strong>{{ config?.signal_diagnostics_max_rows ?? 100 }}</strong></div>
       </div>
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Avg</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Reject</span><span>Blocked</span><span>L win</span><span>S win</span></div>
