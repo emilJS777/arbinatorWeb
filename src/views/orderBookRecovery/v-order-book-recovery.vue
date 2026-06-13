@@ -594,7 +594,7 @@ export default {
         <div><span>Gross loss</span><strong>{{ fmt(metrics?.gross_loss, 2) }} USDT</strong></div>
       </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>TP/SL</span><span>TP</span><span>SL</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
         <div class="recovery-row recovery-row--trades" v-for="trade in trades" :key="trade.id">
           <span>{{ trade.id }}</span>
           <span>{{ trade.execution_mode || 'paper' }}</span>
@@ -608,9 +608,14 @@ export default {
             <small>{{ pnlLabel(trade) }}</small>
           </span>
           <span :class="['result-pill', trade.live_status || trade.result || 'open']">{{ trade.live_status || trade.result || 'open' }}</span>
+          <span :class="['result-pill', trade.tp_sl_protected ? 'win' : (trade.execution_mode === 'live' ? 'loss' : 'neutral')]">
+            {{ trade.execution_mode === 'live' ? (trade.tp_sl_protected ? 'Protected' : 'Exchange TP/SL not created') : '-' }}
+          </span>
+          <span>{{ fmt(trade.exchange_tp_price, 6) }}</span>
+          <span>{{ fmt(trade.exchange_sl_price, 6) }}</span>
           <span>{{ trade.live_exchange_order_id || '-' }}</span>
           <span>{{ fmt((trade.live_entry_fee || 0) + (trade.live_exit_fee || 0), 4) }}</span>
-          <span>{{ trade.live_error || '-' }}</span>
+          <span>{{ trade.tp_sl_error || trade.live_error || '-' }}</span>
           <span class="trade-actions">
             <button @click="viewDetails(trade)">View Details</button>
             <button v-if="trade.closed_at && !trade.is_archived" @click="archiveTrade(trade)">Archive</button>
@@ -636,6 +641,12 @@ export default {
             <div><span>Symbol</span><strong>{{ detail('summary.symbol') }}</strong></div>
             <div><span>Entry</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
             <div><span>P/L</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
+            <div><span>TP/SL protected</span><strong>{{ detail('trade.tp_sl_protected') ? 'Yes' : 'No' }}</strong></div>
+            <div><span>TP price</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
+            <div><span>SL price</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
+            <div><span>TP order</span><strong>{{ detail('trade.exchange_tp_order_id') || '-' }}</strong></div>
+            <div><span>SL order</span><strong>{{ detail('trade.exchange_sl_order_id') || '-' }}</strong></div>
+            <div><span>TP/SL error</span><strong>{{ detail('trade.tp_sl_error') || '-' }}</strong></div>
           </div>
         </div>
 
@@ -893,8 +904,8 @@ button{
   background: rgba(255,255,255,.04);
 }
 .recovery-row--trades{
-  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr 1fr .7fr 1.2fr 1.1fr;
-  min-width: 1320px;
+  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr .95fr .8fr .8fr 1fr .7fr 1.2fr 1.1fr;
+  min-width: 1640px;
 }
 .trade-actions{
   display: flex;
