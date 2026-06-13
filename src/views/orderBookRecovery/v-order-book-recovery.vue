@@ -33,6 +33,17 @@ export default {
     exportableTradesCount() {
       return (this.trades || []).filter(trade => trade.closed_at && !trade.is_archived).length;
     },
+    sideBiasWarning() {
+      const finalRows = (this.debug?.signal_diagnostics_last_100 || [])
+          .filter(row => ["long", "short"].includes(row.final_side))
+          .slice(-50);
+      if (finalRows.length < 10) return null;
+      const longCount = finalRows.filter(row => row.final_side === "long").length;
+      const shortCount = finalRows.filter(row => row.final_side === "short").length;
+      if (longCount / finalRows.length > 0.9) return "Side bias detected: mostly long. Check thresholds and diagnostics.";
+      if (shortCount / finalRows.length > 0.9) return "Side bias detected: mostly short. Check thresholds and diagnostics.";
+      return null;
+    },
   },
   data() {
     return {
@@ -630,14 +641,22 @@ export default {
         <div><span>Short signals</span><strong>{{ debug?.short_signals_count ?? 0 }}</strong></div>
         <div><span>Long opened</span><strong>{{ debug?.long_opened_count ?? 0 }}</strong></div>
         <div><span>Short opened</span><strong>{{ debug?.short_opened_count ?? 0 }}</strong></div>
+        <div><span>Raw long hits</span><strong>{{ debug?.raw_long_threshold_hits ?? 0 }}</strong></div>
+        <div><span>Raw short hits</span><strong>{{ debug?.raw_short_threshold_hits ?? 0 }}</strong></div>
+        <div><span>Long consensus passed</span><strong>{{ debug?.long_consensus_passed_count ?? 0 }}</strong></div>
+        <div><span>Short consensus passed</span><strong>{{ debug?.short_consensus_passed_count ?? 0 }}</strong></div>
+        <div><span>Long blocked</span><strong>{{ debug?.long_blocked_count ?? 0 }}</strong></div>
+        <div><span>Short blocked</span><strong>{{ debug?.short_blocked_count ?? 0 }}</strong></div>
+        <div><span>Final long</span><strong>{{ debug?.final_long_count ?? 0 }}</strong></div>
+        <div><span>Final short</span><strong>{{ debug?.final_short_count ?? 0 }}</strong></div>
         <div><span>Max rows</span><strong>{{ config?.signal_diagnostics_max_rows ?? 100 }}</strong></div>
       </div>
+      <div class="debug-warning" v-if="sideBiasWarning">{{ sideBiasWarning }}</div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Avg</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Reject</span><span>Blocked</span><span>L win</span><span>S win</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Reject</span><span>L win</span><span>S win</span></div>
         <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
           <span>{{ dt(row.timestamp) }}</span>
           <span>{{ fmt(row.median_imbalance, 4) }}</span>
-          <span>{{ fmt(row.avg_imbalance, 4) }}</span>
           <span>{{ fmt(row.momentum, 8) }}</span>
           <span>{{ row.long_confirms ?? '-' }}</span>
           <span>{{ row.short_confirms ?? '-' }}</span>
@@ -645,8 +664,12 @@ export default {
           <span>{{ fmt(row.short_ratio, 2) }}</span>
           <span>{{ row.proposed_side || 'none' }}</span>
           <span>{{ row.final_side || 'none' }}</span>
+          <span>{{ row.short_threshold_hit ? 'yes' : 'no' }}</span>
+          <span>{{ row.configured_exchange_long_signal ? 'L' : '-' }} / {{ row.configured_exchange_short_signal ? 'S' : '-' }}</span>
+          <span>C:{{ row.short_blocked_by_consensus ? 'yes' : 'no' }} CFG:{{ row.short_blocked_by_configured_exchange ? 'yes' : 'no' }} FB:{{ row.short_blocked_by_feedback ? 'yes' : 'no' }}</span>
+          <span>{{ row.why_long_selected || '-' }}</span>
+          <span>{{ row.why_short_rejected || '-' }}</span>
           <span>{{ row.reject_reason || '-' }}</span>
-          <span>{{ row.blocked_side || '-' }}</span>
           <span>{{ fmt(row.long_win_rate, 2) }}%</span>
           <span>{{ fmt(row.short_win_rate, 2) }}%</span>
         </div>
@@ -1264,8 +1287,8 @@ button{
   min-width: 1120px;
 }
 .recovery-row--signal-diagnostics{
-  grid-template-columns: minmax(150px, 1.3fr) repeat(7, minmax(78px, .72fr)) minmax(88px, .8fr) minmax(78px, .7fr) minmax(160px, 1.3fr) minmax(92px, .8fr) minmax(72px, .65fr) minmax(72px, .65fr);
-  min-width: 1320px;
+  grid-template-columns: minmax(150px, 1.2fr) repeat(6, minmax(72px, .65fr)) minmax(88px, .75fr) minmax(78px, .65fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(220px, 1.7fr) minmax(160px, 1.2fr) minmax(72px, .6fr) minmax(72px, .6fr);
+  min-width: 1900px;
 }
 .recovery-row--consensus{
   grid-template-columns: repeat(10, minmax(0, 1fr));
