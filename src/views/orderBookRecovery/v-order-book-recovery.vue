@@ -197,8 +197,90 @@ export default {
         exchange_position_closed_external: "Closed externally on exchange",
         exchange_take_profit: "Exchange take profit",
         exchange_stop_loss: "Exchange stop loss",
+        manual_close: "Manual close",
+        take_profit: "Take profit",
+        stop_loss: "Stop loss",
       };
       return labels[reason] || reason || "-";
+    },
+    formatOrderId(raw) {
+      if (!raw) return "-";
+      if (typeof raw === "string") {
+        try {
+          return this.formatOrderId(JSON.parse(raw));
+        } catch {
+          return raw;
+        }
+      }
+      if (typeof raw === "object") {
+        return raw.orderId || raw.order_id || raw.id || raw.clientOrderId || raw.externalOid || "-";
+      }
+      return String(raw);
+    },
+    formatLiveStatus(status) {
+      const labels = {
+        open: "Open",
+        closed: "Closed",
+        open_failed: "Open failed",
+        close_failed: "Close failed",
+        tp_sl_unprotected: "Needs attention",
+        reconciled: "Reconciled",
+      };
+      return labels[status] || (status ? String(status).replaceAll("_", " ") : "-");
+    },
+    liveStatusTone(status) {
+      if (["open", "closed", "reconciled"].includes(status)) return "positive";
+      if (["open_failed", "close_failed", "tp_sl_unprotected"].includes(status)) return "negative";
+      return "neutral";
+    },
+    formatProtectionStatus(trade) {
+      if ((trade?.execution_mode || "paper") !== "live") return "Not required";
+      if (trade?.tp_sl_protected) return "Protected";
+      if (trade?.tp_sl_error || trade?.live_status === "tp_sl_unprotected") return "Unprotected";
+      if (trade?.live_status === "open_failed") return "Not created";
+      if (trade?.live_status === "open" && !trade?.exchange_tp_order_id && !trade?.exchange_sl_order_id) return "Pending";
+      return "Not created";
+    },
+    protectionTone(trade) {
+      const status = this.formatProtectionStatus(trade);
+      if (status === "Protected") return "positive";
+      if (["Unprotected", "Not created"].includes(status)) return "negative";
+      if (status === "Pending") return "warning";
+      return "neutral";
+    },
+    resultLabel(trade) {
+      if (["open_failed", "close_failed"].includes(trade?.live_status)) return "Failed";
+      if (!trade?.closed_at) return "Floating";
+      if (trade?.live_status === "closed" && ["exchange_position_already_closed", "exchange_position_closed_external"].includes(trade?.reason_close)) return "Closed";
+      return this.pnlLabel(trade);
+    },
+    resultTone(trade) {
+      const label = this.resultLabel(trade);
+      if (label === "Won") return "positive";
+      if (["Lost", "Failed"].includes(label)) return "negative";
+      if (label === "Floating") return "info";
+      return "neutral";
+    },
+    formatWarningSummary(trade) {
+      if (!trade) return "";
+      if (trade.tp_sl_error || trade.live_status === "tp_sl_unprotected") return "Needs attention";
+      if (["open_failed", "close_failed"].includes(trade.live_status)) return "Warning";
+      if (trade.exit_price_fallback_used || trade.exit_price_warning || trade.live_error) return "Warning";
+      return "";
+    },
+    feeIndicator(trade) {
+      if ((trade?.execution_mode || "paper") !== "live") return "";
+      const fees = Number(trade?.live_entry_fee || 0) + Number(trade?.live_exit_fee || 0);
+      return fees ? "net incl. fees" : "net/gross unknown";
+    },
+    prettyRaw(value) {
+      if (!value) return "-";
+      try {
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return String(value);
+      }
     },
     setShowArchived(event) {
       this.$store.dispatch("orderBookRecovery/SET_SHOW_ARCHIVED", event.target.checked);
@@ -603,30 +685,24 @@ export default {
         <div><span>Gross loss</span><strong>{{ fmt(metrics?.gross_loss, 2) }} USDT</strong></div>
       </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>Close reason</span><span>TP/SL</span><span>TP</span><span>SL</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Result</span><span>Live</span><span>Protection</span><span>Action</span></div>
         <div class="recovery-row recovery-row--trades" v-for="trade in trades" :key="trade.id">
-          <span>{{ trade.id }}</span>
-          <span>{{ trade.execution_mode || 'paper' }}</span>
-          <span>{{ trade.side }}</span>
-          <span>{{ trade.recovery_step }}</span>
-          <span>{{ fmt(trade.margin, 2) }}</span>
-          <span>{{ fmt(trade.entry_price, 4) }}</span>
-          <span>{{ fmt(trade.exit_price, 4) }}</span>
-          <span :class="['pnl-badge', metricTone(trade.pnl)]">
+          <span data-label="ID">#{{ trade.id }}</span>
+          <span data-label="Mode"><span :class="['mode-badge', String(trade.execution_mode || 'paper').toLowerCase() === 'live' ? 'live' : 'paper']">{{ trade.execution_mode || 'paper' }}</span></span>
+          <span data-label="Side"><span :class="['side-badge', String(trade.side || '').toLowerCase()]">{{ trade.side }}</span></span>
+          <span data-label="Step">{{ trade.recovery_step }}</span>
+          <span data-label="Margin">{{ fmt(trade.margin, 2) }}</span>
+          <span data-label="Entry">{{ fmt(trade.entry_price, 4) }}</span>
+          <span data-label="Exit">{{ fmt(trade.exit_price, 4) }}</span>
+          <span data-label="PnL" :class="['pnl-badge', resultTone(trade)]">
             <strong>{{ moneyResult(trade.pnl) }}</strong>
-            <small>{{ pnlLabel(trade) }}</small>
+            <small>{{ feeIndicator(trade) || resultLabel(trade) }}</small>
           </span>
-          <span :class="['result-pill', trade.live_status || trade.result || 'open']">{{ trade.live_status || trade.result || 'open' }}</span>
-          <span>{{ closeReasonLabel(trade.reason_close) }}</span>
-          <span :class="['result-pill', trade.tp_sl_protected ? 'win' : (trade.execution_mode === 'live' ? 'loss' : 'neutral')]">
-            {{ trade.execution_mode === 'live' ? (trade.tp_sl_protected ? 'Protected' : 'Exchange TP/SL not created') : '-' }}
-          </span>
-          <span>{{ fmt(trade.exchange_tp_price, 6) }}</span>
-          <span>{{ fmt(trade.exchange_sl_price, 6) }}</span>
-          <span>{{ trade.live_exchange_order_id || '-' }}</span>
-          <span>{{ fmt((trade.live_entry_fee || 0) + (trade.live_exit_fee || 0), 4) }}</span>
-          <span>{{ trade.tp_sl_error || trade.live_error || '-' }}</span>
-          <span class="trade-actions">
+          <span data-label="Result"><span :class="['status-badge', resultTone(trade)]">{{ resultLabel(trade) }}</span></span>
+          <span data-label="Live"><span :class="['status-badge', liveStatusTone(trade.live_status)]">{{ formatLiveStatus(trade.live_status) }}</span></span>
+          <span data-label="Protection"><span :class="['status-badge', protectionTone(trade)]">{{ formatProtectionStatus(trade) }}</span></span>
+          <span class="trade-actions" data-label="Action">
+            <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ formatWarningSummary(trade) }}</span>
             <button @click="viewDetails(trade)">View Details</button>
             <button v-if="trade.closed_at && !trade.is_archived" @click="archiveTrade(trade)">Archive</button>
             <button v-if="trade.is_archived" class="button-danger" @click="deleteArchivedTrade(trade)">Delete</button>
@@ -643,23 +719,65 @@ export default {
         </div>
 
         <div class="detail-block">
-          <h4>Summary</h4>
+          <h4>Trade summary</h4>
           <div class="metric-grid">
             <div><span>Trade</span><strong>#{{ detail('summary.id') }}</strong></div>
+            <div><span>Mode</span><strong>{{ detail('trade.execution_mode', 'paper') }}</strong></div>
             <div><span>Side</span><strong>{{ detail('summary.side') }}</strong></div>
             <div><span>Exchange</span><strong>{{ detail('summary.exchange') }}</strong></div>
             <div><span>Symbol</span><strong>{{ detail('summary.symbol') }}</strong></div>
-            <div><span>Entry</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
-            <div><span>P/L</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
+            <div><span>Step</span><strong>{{ detail('trade.recovery_step') }}</strong></div>
+            <div><span>Margin</span><strong>{{ fmt(detail('trade.margin', 0), 2) }} USDT</strong></div>
+            <div><span>Notional</span><strong>{{ fmt(detail('trade.notional', 0), 2) }} USDT</strong></div>
+            <div><span>Opened at</span><strong>{{ dt(detail('trade.opened_at')) }}</strong></div>
+            <div><span>Closed at</span><strong>{{ dt(detail('trade.closed_at')) }}</strong></div>
             <div><span>Close reason</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
-            <div><span>TP/SL protected</span><strong>{{ detail('trade.tp_sl_protected') ? 'Yes' : 'No' }}</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>Execution</h4>
+          <div class="metric-grid">
+            <div><span>Live status</span><strong>{{ formatLiveStatus(detail('trade.live_status')) }}</strong></div>
+            <div><span>Entry</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
+            <div><span>Exit</span><strong>{{ fmt(detail('trade.exit_price', 0), 6) }}</strong></div>
+            <div><span>Filled amount</span><strong>{{ fmt(detail('trade.live_filled_amount', 0), 8) }}</strong></div>
+            <div><span>Open order ID</span><strong>{{ formatOrderId(detail('trade.live_exchange_order_id')) }}</strong></div>
+            <div><span>Close order ID</span><strong>{{ formatOrderId(detail('trade.live_close_order_id')) }}</strong></div>
+            <div><span>Live error</span><strong>{{ detail('trade.live_error') || '-' }}</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>TP/SL protection</h4>
+          <div class="metric-grid">
+            <div><span>Status</span><strong>{{ detail('trade.tp_sl_protected') ? 'Protected' : 'Exchange TP/SL not created' }}</strong></div>
             <div><span>TP price</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
             <div><span>SL price</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
-            <div><span>TP order</span><strong>{{ detail('trade.exchange_tp_order_id') || '-' }}</strong></div>
-            <div><span>SL order</span><strong>{{ detail('trade.exchange_sl_order_id') || '-' }}</strong></div>
+            <div><span>TP order ID</span><strong>{{ formatOrderId(detail('trade.exchange_tp_order_id')) }}</strong></div>
+            <div><span>SL order ID</span><strong>{{ formatOrderId(detail('trade.exchange_sl_order_id')) }}</strong></div>
+            <div><span>Created at</span><strong>{{ dt(detail('trade.tp_sl_created_at')) }}</strong></div>
             <div><span>TP/SL error</span><strong>{{ detail('trade.tp_sl_error') || '-' }}</strong></div>
-            <div><span>Exit warning</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>PnL & fees</h4>
+          <div class="metric-grid">
+            <div><span>PnL</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
+            <div><span>Entry fee</span><strong>{{ fmt(detail('trade.live_entry_fee', 0), 6) }} USDT</strong></div>
+            <div><span>Exit fee</span><strong>{{ fmt(detail('trade.live_exit_fee', 0), 6) }} USDT</strong></div>
+            <div><span>Fee status</span><strong>{{ feeIndicator(detail('trade', {})) || '-' }}</strong></div>
             <div><span>PnL source</span><strong>{{ detail('trade.pnl_source') || '-' }}</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>Reconciliation</h4>
+          <div class="metric-grid">
+            <div><span>Close reason</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
+            <div><span>Exit fallback used</span><strong>{{ detail('trade.exit_price_fallback_used') ? 'Yes' : 'No' }}</strong></div>
+            <div><span>Exit warning</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
           </div>
         </div>
 
@@ -710,6 +828,18 @@ export default {
             <div><span>Approved</span><strong>{{ detail('risk.approved') }}</strong></div>
             <div><span>Reason</span><strong>{{ detail('risk.reason') }}</strong></div>
           </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>Raw exchange responses</h4>
+          <details class="raw-details">
+            <summary>Open response</summary>
+            <pre class="raw-block">{{ prettyRaw(detail('trade.live_raw_open_response_json', null)) }}</pre>
+          </details>
+          <details class="raw-details">
+            <summary>Close response</summary>
+            <pre class="raw-block">{{ prettyRaw(detail('trade.live_raw_close_response_json', null)) }}</pre>
+          </details>
         </div>
 
         <div class="detail-block">
@@ -813,8 +943,14 @@ export default {
   text-transform: uppercase;
 }
 .mode-badge{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 8px;
   border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 .mode-badge.paper{
   color: #8fdfe0;
@@ -917,13 +1053,14 @@ button{
   background: rgba(255,255,255,.04);
 }
 .recovery-row--trades{
-  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr 1.2fr .95fr .8fr .8fr 1fr .7fr 1.2fr 1.1fr;
-  min-width: 1760px;
+  grid-template-columns: minmax(54px, .55fr) minmax(70px, .65fr) minmax(72px, .7fr) minmax(48px, .45fr) minmax(74px, .7fr) minmax(86px, .8fr) minmax(86px, .8fr) minmax(132px, 1.05fr) minmax(86px, .8fr) minmax(110px, .95fr) minmax(120px, 1fr) minmax(180px, 1.35fr);
+  min-width: 1120px;
 }
 .trade-actions{
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 .trade-actions button{
   min-height: 32px;
@@ -982,10 +1119,93 @@ button{
   background: rgba(255,107,107,.10);
   border-color: rgba(255,107,107,.22);
 }
+.pnl-badge.info{
+  background: rgba(92,169,255,.10);
+  border-color: rgba(92,169,255,.22);
+}
+.pnl-badge.info strong{
+  color: #8ec5ff;
+}
 .pnl-badge small{
   color: #90a0be;
   font-size: 11px;
   text-transform: uppercase;
+}
+.side-badge,
+.status-badge,
+.warning-chip{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 26px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.side-badge.long,
+.side-badge.buy{
+  color: #62d98f;
+  background: rgba(98,217,143,.10);
+  border: 1px solid rgba(98,217,143,.22);
+}
+.side-badge.short,
+.side-badge.sell{
+  color: #ff6b6b;
+  background: rgba(255,107,107,.10);
+  border: 1px solid rgba(255,107,107,.22);
+}
+.status-badge.positive{
+  color: #62d98f;
+  background: rgba(98,217,143,.10);
+  border: 1px solid rgba(98,217,143,.22);
+}
+.status-badge.negative{
+  color: #ff8f8f;
+  background: rgba(255,107,107,.10);
+  border: 1px solid rgba(255,107,107,.22);
+}
+.status-badge.warning,
+.warning-chip{
+  color: #ffcf9b;
+  background: rgba(255,184,107,.12);
+  border: 1px solid rgba(255,184,107,.24);
+}
+.status-badge.info{
+  color: #8ec5ff;
+  background: rgba(92,169,255,.10);
+  border: 1px solid rgba(92,169,255,.22);
+}
+.status-badge.neutral{
+  color: #d7deef;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+}
+.raw-details{
+  display: grid;
+  gap: 8px;
+  color: #d7deef;
+}
+.raw-details summary{
+  cursor: pointer;
+  color: #8fdfe0;
+  font-weight: 800;
+}
+.raw-block{
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  color: #d7deef;
+  background: rgba(4,8,15,.75);
+  border: 1px solid rgba(255,255,255,.08);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .result-pill.win{
   color: #62d98f;
@@ -1009,9 +1229,38 @@ button{
   padding: 10px;
 }
 @media (max-width: 760px){
-  .recovery-row,
-  .recovery-row--trades{
+  .recovery-row{
     grid-template-columns: 1fr 1fr;
+  }
+  .recovery-row--trades{
+    grid-template-columns: 1fr;
+    min-width: 0;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .recovery-row--head{
+    display: none;
+  }
+  .recovery-row--trades > span{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .recovery-row--trades > span::before{
+    content: attr(data-label);
+    color: #90a0be;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .recovery-row--trades > span:last-child{
+    border-bottom: 0;
+  }
+  .recovery-row--trades .trade-actions{
+    justify-content: flex-end;
   }
 }
 </style>
