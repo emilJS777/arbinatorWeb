@@ -612,6 +612,36 @@ export default {
     </section>
 
     <section class="recovery-section">
+      <h3>Signal Diagnostics</h3>
+      <div class="metric-grid">
+        <div><span>Long signals</span><strong>{{ debug?.long_signals_count ?? 0 }}</strong></div>
+        <div><span>Short signals</span><strong>{{ debug?.short_signals_count ?? 0 }}</strong></div>
+        <div><span>Long opened</span><strong>{{ debug?.long_opened_count ?? 0 }}</strong></div>
+        <div><span>Short opened</span><strong>{{ debug?.short_opened_count ?? 0 }}</strong></div>
+      </div>
+      <div class="recovery-table">
+        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Avg</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Reject</span><span>Blocked</span><span>L win</span><span>S win</span></div>
+        <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
+          <span>{{ dt(row.timestamp) }}</span>
+          <span>{{ fmt(row.median_imbalance, 4) }}</span>
+          <span>{{ fmt(row.avg_imbalance, 4) }}</span>
+          <span>{{ fmt(row.momentum, 8) }}</span>
+          <span>{{ row.long_confirms ?? '-' }}</span>
+          <span>{{ row.short_confirms ?? '-' }}</span>
+          <span>{{ fmt(row.long_ratio, 2) }}</span>
+          <span>{{ fmt(row.short_ratio, 2) }}</span>
+          <span>{{ row.proposed_side || 'none' }}</span>
+          <span>{{ row.final_side || 'none' }}</span>
+          <span>{{ row.reject_reason || '-' }}</span>
+          <span>{{ row.blocked_side || '-' }}</span>
+          <span>{{ fmt(row.long_win_rate, 2) }}%</span>
+          <span>{{ fmt(row.short_win_rate, 2) }}%</span>
+        </div>
+        <div class="empty-row" v-if="!(debug?.signal_diagnostics_last_100 || []).length">No signal diagnostics yet</div>
+      </div>
+    </section>
+
+    <section class="recovery-section">
       <h3>Multi-exchange consensus</h3>
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head recovery-row--consensus"><span>Exchange</span><span>Valid</span><span>Imbalance</span><span>Raw imbalance</span><span>Anomaly</span><span>Spread %</span><span>Momentum</span><span>Long</span><span>Short</span><span>Reject reason</span></div>
@@ -1219,6 +1249,10 @@ button{
 .recovery-row--scanner{
   grid-template-columns: minmax(95px, .9fr) minmax(95px, .9fr) minmax(85px, .8fr) minmax(80px, .7fr) minmax(80px, .7fr) minmax(150px, 1.2fr) minmax(150px, 1.2fr) minmax(180px, 1.4fr) minmax(150px, 1.2fr);
   min-width: 1120px;
+}
+.recovery-row--signal-diagnostics{
+  grid-template-columns: minmax(150px, 1.3fr) repeat(7, minmax(78px, .72fr)) minmax(88px, .8fr) minmax(78px, .7fr) minmax(160px, 1.3fr) minmax(92px, .8fr) minmax(72px, .65fr) minmax(72px, .65fr);
+  min-width: 1320px;
 }
 .recovery-row--consensus{
   grid-template-columns: repeat(10, minmax(0, 1fr));
