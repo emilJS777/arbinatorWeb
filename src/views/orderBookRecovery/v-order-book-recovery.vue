@@ -191,6 +191,15 @@ export default {
       if (pnl < 0) return "Lost";
       return "Break even";
     },
+    closeReasonLabel(reason) {
+      const labels = {
+        exchange_position_already_closed: "Exchange position already closed",
+        exchange_position_closed_external: "Closed externally on exchange",
+        exchange_take_profit: "Exchange take profit",
+        exchange_stop_loss: "Exchange stop loss",
+      };
+      return labels[reason] || reason || "-";
+    },
     setShowArchived(event) {
       this.$store.dispatch("orderBookRecovery/SET_SHOW_ARCHIVED", event.target.checked);
     },
@@ -594,7 +603,7 @@ export default {
         <div><span>Gross loss</span><strong>{{ fmt(metrics?.gross_loss, 2) }} USDT</strong></div>
       </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>TP/SL</span><span>TP</span><span>SL</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>P/L</span><span>Live status</span><span>Close reason</span><span>TP/SL</span><span>TP</span><span>SL</span><span>Order ID</span><span>Fees</span><span>Error</span><span>Action</span></div>
         <div class="recovery-row recovery-row--trades" v-for="trade in trades" :key="trade.id">
           <span>{{ trade.id }}</span>
           <span>{{ trade.execution_mode || 'paper' }}</span>
@@ -608,6 +617,7 @@ export default {
             <small>{{ pnlLabel(trade) }}</small>
           </span>
           <span :class="['result-pill', trade.live_status || trade.result || 'open']">{{ trade.live_status || trade.result || 'open' }}</span>
+          <span>{{ closeReasonLabel(trade.reason_close) }}</span>
           <span :class="['result-pill', trade.tp_sl_protected ? 'win' : (trade.execution_mode === 'live' ? 'loss' : 'neutral')]">
             {{ trade.execution_mode === 'live' ? (trade.tp_sl_protected ? 'Protected' : 'Exchange TP/SL not created') : '-' }}
           </span>
@@ -641,12 +651,15 @@ export default {
             <div><span>Symbol</span><strong>{{ detail('summary.symbol') }}</strong></div>
             <div><span>Entry</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
             <div><span>P/L</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
+            <div><span>Close reason</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
             <div><span>TP/SL protected</span><strong>{{ detail('trade.tp_sl_protected') ? 'Yes' : 'No' }}</strong></div>
             <div><span>TP price</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
             <div><span>SL price</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
             <div><span>TP order</span><strong>{{ detail('trade.exchange_tp_order_id') || '-' }}</strong></div>
             <div><span>SL order</span><strong>{{ detail('trade.exchange_sl_order_id') || '-' }}</strong></div>
             <div><span>TP/SL error</span><strong>{{ detail('trade.tp_sl_error') || '-' }}</strong></div>
+            <div><span>Exit warning</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
+            <div><span>PnL source</span><strong>{{ detail('trade.pnl_source') || '-' }}</strong></div>
           </div>
         </div>
 
@@ -904,8 +917,8 @@ button{
   background: rgba(255,255,255,.04);
 }
 .recovery-row--trades{
-  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr .95fr .8fr .8fr 1fr .7fr 1.2fr 1.1fr;
-  min-width: 1640px;
+  grid-template-columns: .45fr .65fr .65fr .55fr .7fr .8fr .8fr minmax(110px, 1fr) .9fr 1.2fr .95fr .8fr .8fr 1fr .7fr 1.2fr 1.1fr;
+  min-width: 1760px;
 }
 .trade-actions{
   display: flex;
