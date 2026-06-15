@@ -33,6 +33,9 @@ export default {
     exportableTradesCount() {
       return (this.trades || []).filter(trade => trade.closed_at && !trade.is_archived).length;
     },
+    estimatedNotional() {
+      return Number(this.recoveryState.current_margin || this.config?.base_margin_usdt || 0) * Number(this.config?.leverage || 0);
+    },
     sideBiasWarning() {
       const finalRows = (this.debug?.signal_diagnostics_last_100 || [])
           .filter(row => ["long", "short"].includes(row.final_side))
@@ -50,6 +53,7 @@ export default {
       form: null,
       poller: null,
       decisionDetails: null,
+      manualMarginValue: null,
     };
   },
   mounted() {
@@ -168,6 +172,36 @@ export default {
         });
         this.$store.dispatch("orderBookRecovery/LOAD");
       }).finally(() => this.emitter.emit("loader", false));
+    },
+    resetRecovery() {
+      if (this.openPosition) {
+        this.emitter.emit("toster", {success: false, msg: "cannot_change_margin_with_open_position"});
+        return;
+      }
+      if (!window.confirm("Reset recovery to base margin?")) return;
+      this.$store.dispatch("orderBookRecovery/RESET_RECOVERY").then(res => {
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "Recovery reset" : getResponseMessage(res),
+        });
+      });
+    },
+    setCurrentMargin() {
+      if (this.openPosition) {
+        this.emitter.emit("toster", {success: false, msg: "cannot_change_margin_with_open_position"});
+        return;
+      }
+      const value = Number(this.manualMarginValue);
+      if (!value || value <= 0) {
+        this.emitter.emit("toster", {success: false, msg: "Enter valid current margin"});
+        return;
+      }
+      this.$store.dispatch("orderBookRecovery/SET_CURRENT_MARGIN", value).then(res => {
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "Current margin updated" : getResponseMessage(res),
+        });
+      });
     },
     fmt(value, digits = 4) {
       if (value === null || value === undefined) return "-";
@@ -528,8 +562,11 @@ export default {
     <section class="recovery-section">
       <h3>State</h3>
       <div class="metric-grid">
+        <div><span>Base margin</span><strong>{{ fmt(config?.base_margin_usdt, 2) }} USDT</strong></div>
         <div><span>Current step</span><strong>{{ recoveryState.current_step ?? 0 }}</strong></div>
         <div><span>Current margin</span><strong>{{ fmt(recoveryState.current_margin, 2) }} USDT</strong></div>
+        <div><span>Live max margin</span><strong>{{ fmt(config?.live_max_margin_usdt, 2) }} USDT</strong></div>
+        <div><span>Estimated notional</span><strong>{{ fmt(estimatedNotional, 2) }} USDT</strong></div>
         <div><span>Consecutive losses</span><strong>{{ recoveryState.consecutive_losses ?? 0 }}</strong></div>
         <div><span>Status</span><strong>{{ debug?.status || statePayload?.status || (recoveryState.is_stopped ? 'stopped' : (config?.enabled ? 'running' : 'stopped')) }}</strong></div>
         <div><span>Enabled</span><strong>{{ config?.enabled ? 'true' : 'false' }}</strong></div>
@@ -540,6 +577,14 @@ export default {
         <div><span>Max drawdown</span><strong>{{ fmt(metrics?.max_drawdown, 2) }} USDT</strong></div>
         <div><span>Stop reason</span><strong>{{ recoveryState.stop_reason || '-' }}</strong></div>
         <div><span>Paused until</span><strong>{{ dt(recoveryState.paused_until) }}</strong></div>
+        <div><span>Manual reset at</span><strong>{{ dt(recoveryState.last_manual_recovery_reset_at) }}</strong></div>
+        <div><span>Manual margin at</span><strong>{{ dt(recoveryState.last_manual_margin_override_at) }}</strong></div>
+        <div><span>Manual margin value</span><strong>{{ fmt(recoveryState.last_manual_margin_override_value, 2) }} USDT</strong></div>
+      </div>
+      <div class="action-row">
+        <button :disabled="Boolean(openPosition)" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> Reset recovery to base margin</button>
+        <input v-model.number="manualMarginValue" :disabled="Boolean(openPosition)" min="0" step="0.1" type="number" placeholder="Current margin USDT"/>
+        <button :disabled="Boolean(openPosition)" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> Set current margin</button>
       </div>
     </section>
 

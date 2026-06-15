@@ -32,6 +32,14 @@ export default {
     clearDiagnostics() {
         return apiClient.post("/orderbook-recovery/diagnostics/clear", {});
     },
+    resetRecovery() {
+        return apiClient.post("/orderbook-recovery/recovery/reset", {});
+    },
+    setCurrentMargin(currentMargin) {
+        return apiClient.post("/orderbook-recovery/recovery/set-current-margin", {
+            current_margin: currentMargin,
+        });
+    },
     getScannerDiagnostics() {
         return apiClient.get("/scanner/diagnostics");
     },

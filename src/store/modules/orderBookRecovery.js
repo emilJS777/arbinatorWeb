@@ -68,6 +68,16 @@ export default {
             await dispatch("LOAD_DEBUG");
             return res;
         },
+        async RESET_RECOVERY({ dispatch }) {
+            const res = await orderBookRecoveryApi.resetRecovery();
+            await dispatch("LOAD");
+            return res;
+        },
+        async SET_CURRENT_MARGIN({ dispatch }, currentMargin) {
+            const res = await orderBookRecoveryApi.setCurrentMargin(currentMargin);
+            await dispatch("LOAD");
+            return res;
+        },
         async CLOSE_MANUAL({ dispatch }, positionId) {
             const res = await orderBookRecoveryApi.closeManual(positionId);
             await dispatch("LOAD");
