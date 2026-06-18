@@ -54,6 +54,12 @@ test('live config fields have defaults for UI binding', () => {
   assert.equal(form.live_max_total_loss_usdt, 10);
   assert.equal(form.live_order_type, 'market');
   assert.equal(form.live_open_failed_cooldown_seconds, 60);
+  assert.equal(form.live_fee_filter_enabled, true);
+  assert.equal(form.live_fee_filter_taker_fee_percent, 0.1);
+  assert.equal(form.momentum_confirmation_enabled, false);
+  assert.equal(form.side_quality_filter_enabled, false);
+  assert.equal(form.side_quality_lookback_trades, 5);
+  assert.equal(form.side_quality_cooldown_seconds, 600);
 });
 
 test('save payload preserves live config fields', () => {
@@ -68,6 +74,12 @@ test('save payload preserves live config fields', () => {
     live_max_total_loss_usdt: '8',
     live_order_type: 'market',
     live_open_failed_cooldown_seconds: '45',
+    live_fee_filter_enabled: true,
+    live_fee_filter_taker_fee_percent: '0.2',
+    momentum_confirmation_enabled: true,
+    side_quality_filter_enabled: true,
+    side_quality_lookback_trades: '4',
+    side_quality_cooldown_seconds: '120',
   });
   assert.equal(payload.execution_mode, 'live');
   assert.equal(payload.live_enabled_confirmation, true);
@@ -77,4 +89,10 @@ test('save payload preserves live config fields', () => {
   assert.equal(payload.live_max_total_loss_usdt, 8);
   assert.equal(payload.live_order_type, 'market');
   assert.equal(payload.live_open_failed_cooldown_seconds, 45);
+  assert.equal(payload.live_fee_filter_enabled, true);
+  assert.equal(payload.live_fee_filter_taker_fee_percent, 0.2);
+  assert.equal(payload.momentum_confirmation_enabled, true);
+  assert.equal(payload.side_quality_filter_enabled, true);
+  assert.equal(payload.side_quality_lookback_trades, 4);
+  assert.equal(payload.side_quality_cooldown_seconds, 120);
 });

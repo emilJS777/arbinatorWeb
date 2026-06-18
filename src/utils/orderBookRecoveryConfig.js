@@ -33,6 +33,12 @@ export const configDefaults = {
     live_order_type: "market",
     live_reduce_only_close: true,
     live_open_failed_cooldown_seconds: 60,
+    live_fee_filter_enabled: true,
+    live_fee_filter_taker_fee_percent: 0.1,
+    momentum_confirmation_enabled: false,
+    side_quality_filter_enabled: false,
+    side_quality_lookback_trades: 5,
+    side_quality_cooldown_seconds: 600,
     signal_diagnostics_max_rows: 100,
 };
 
@@ -48,6 +54,12 @@ export const normalizeConfigForm = (form = {}) => ({
     live_max_total_loss_usdt: Number(form.live_max_total_loss_usdt ?? configDefaults.live_max_total_loss_usdt),
     live_order_type: form.live_order_type || configDefaults.live_order_type,
     live_open_failed_cooldown_seconds: Number(form.live_open_failed_cooldown_seconds ?? configDefaults.live_open_failed_cooldown_seconds),
+    live_fee_filter_enabled: form.live_fee_filter_enabled === undefined ? configDefaults.live_fee_filter_enabled : Boolean(form.live_fee_filter_enabled),
+    live_fee_filter_taker_fee_percent: Math.max(0, Number(form.live_fee_filter_taker_fee_percent ?? configDefaults.live_fee_filter_taker_fee_percent)),
+    momentum_confirmation_enabled: Boolean(form.momentum_confirmation_enabled),
+    side_quality_filter_enabled: Boolean(form.side_quality_filter_enabled),
+    side_quality_lookback_trades: Math.max(1, Number(form.side_quality_lookback_trades ?? configDefaults.side_quality_lookback_trades)),
+    side_quality_cooldown_seconds: Math.max(0, Number(form.side_quality_cooldown_seconds ?? configDefaults.side_quality_cooldown_seconds)),
     signal_diagnostics_max_rows: Math.min(500, Math.max(20, Number(form.signal_diagnostics_max_rows ?? configDefaults.signal_diagnostics_max_rows))),
 });
 

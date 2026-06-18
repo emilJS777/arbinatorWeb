@@ -482,6 +482,8 @@ export default {
           <label>Live max daily loss<input v-model.number="form.live_max_daily_loss_usdt" type="number" step="0.1"/></label>
           <label>Live max total loss<input v-model.number="form.live_max_total_loss_usdt" type="number" step="0.1"/></label>
           <label>Live open failed cooldown sec<input v-model.number="form.live_open_failed_cooldown_seconds" type="number" min="0" step="1"/></label>
+          <label class="check-row"><input v-model="form.live_fee_filter_enabled" type="checkbox"/> Live fee-aware entry filter</label>
+          <label>Taker fee % per side<input v-model.number="form.live_fee_filter_taker_fee_percent" type="number" min="0" step="0.01"/></label>
           <label>Live order type
             <select v-model="form.live_order_type">
               <option value="market">Market</option>
@@ -543,6 +545,10 @@ export default {
         <label>Min side win rate<input v-model.number="form.min_side_win_rate" type="number" step="1"/></label>
         <label>Adaptive consensus boost<input v-model.number="form.adaptive_consensus_boost" type="number" step="0.01"/></label>
         <label>Adaptive valid exchanges boost<input v-model.number="form.adaptive_min_valid_exchanges_boost" type="number"/></label>
+        <label class="check-row"><input v-model="form.momentum_confirmation_enabled" type="checkbox"/> Profit protection: momentum direction</label>
+        <label class="check-row"><input v-model="form.side_quality_filter_enabled" type="checkbox"/> Profit protection: side quality</label>
+        <label>Side quality lookback<input v-model.number="form.side_quality_lookback_trades" type="number" min="1"/></label>
+        <label>Side quality cooldown sec<input v-model.number="form.side_quality_cooldown_seconds" type="number" min="0"/></label>
         <label>Signal diagnostics max rows<input v-model.number="form.signal_diagnostics_max_rows" type="number" min="20" max="500" step="1"/></label>
         <label>Paper equity<input v-model.number="form.paper_equity_usdt" type="number"/></label>
         <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/> Consensus enabled</label>
@@ -619,6 +625,7 @@ export default {
         <div><span>Last decision</span><strong>{{ debug?.last_evaluation?.last_decision || statePayload?.last_evaluation?.last_decision || 'none' }}</strong></div>
         <div><span>Reject reason</span><strong>{{ debug?.last_evaluation?.reject_reason || '-' }}</strong></div>
         <div><span>Entry blocked</span><strong>{{ debug?.entry_blocked_reason || '-' }}</strong></div>
+        <div><span>Skip reason</span><strong>{{ debug?.entry_skip_reason || '-' }}</strong></div>
         <div><span>Entry mode</span><strong>{{ debug?.entry_mode || config?.entry_mode || 'instant' }}</strong></div>
         <div><span>Resolved live symbol</span><strong>{{ debug?.resolved_live_symbol || statePayload?.live_market?.resolved_live_symbol || '-' }}</strong></div>
         <div><span>Live market type</span><strong>{{ debug?.live_market_type || statePayload?.live_market?.live_market_type || '-' }}</strong></div>
@@ -698,7 +705,7 @@ export default {
       </div>
       <div class="debug-warning" v-if="sideBiasWarning">{{ sideBiasWarning }}</div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Reject</span><span>L win</span><span>S win</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Skip</span><span>Reject</span><span>L win</span><span>S win</span></div>
         <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
           <span>{{ dt(row.timestamp) }}</span>
           <span>{{ fmt(row.median_imbalance, 4) }}</span>
@@ -714,6 +721,7 @@ export default {
           <span>C:{{ row.short_blocked_by_consensus ? 'yes' : 'no' }} CFG:{{ row.short_blocked_by_configured_exchange ? 'yes' : 'no' }} FB:{{ row.short_blocked_by_feedback ? 'yes' : 'no' }}</span>
           <span>{{ row.why_long_selected || '-' }}</span>
           <span>{{ row.why_short_rejected || '-' }}</span>
+          <span>{{ row.skip_reason || '-' }}</span>
           <span>{{ row.reject_reason || '-' }}</span>
           <span>{{ fmt(row.long_win_rate, 2) }}%</span>
           <span>{{ fmt(row.short_win_rate, 2) }}%</span>
@@ -876,6 +884,9 @@ export default {
           <h4>PnL & fees</h4>
           <div class="metric-grid">
             <div><span>PnL</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
+            <div><span>Gross PnL</span><strong>{{ moneyResult(detail('trade.gross_pnl', detail('summary.pnl', 0))) }}</strong></div>
+            <div><span>Net PnL</span><strong>{{ moneyResult(detail('trade.net_pnl', detail('summary.pnl', 0))) }}</strong></div>
+            <div><span>Total fees</span><strong>{{ fmt(detail('trade.total_fee', 0), 6) }} USDT</strong></div>
             <div><span>Entry fee</span><strong>{{ fmt(detail('trade.live_entry_fee', 0), 6) }} USDT</strong></div>
             <div><span>Exit fee</span><strong>{{ fmt(detail('trade.live_exit_fee', 0), 6) }} USDT</strong></div>
             <div><span>Fee status</span><strong>{{ feeIndicator(detail('trade', {})) || '-' }}</strong></div>
@@ -1332,8 +1343,8 @@ button{
   min-width: 1120px;
 }
 .recovery-row--signal-diagnostics{
-  grid-template-columns: minmax(150px, 1.2fr) repeat(6, minmax(72px, .65fr)) minmax(88px, .75fr) minmax(78px, .65fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(220px, 1.7fr) minmax(160px, 1.2fr) minmax(72px, .6fr) minmax(72px, .6fr);
-  min-width: 1900px;
+  grid-template-columns: minmax(150px, 1.2fr) repeat(6, minmax(72px, .65fr)) minmax(88px, .75fr) minmax(78px, .65fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(220px, 1.7fr) minmax(130px, 1fr) minmax(160px, 1.2fr) minmax(72px, .6fr) minmax(72px, .6fr);
+  min-width: 2030px;
 }
 .recovery-row--consensus{
   grid-template-columns: repeat(10, minmax(0, 1fr));
