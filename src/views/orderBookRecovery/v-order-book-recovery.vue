@@ -996,11 +996,16 @@ export default {
   display: grid;
   gap: 16px;
   color: #d7deef;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 .recovery-heading,
 .recovery-section{
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 .summary-grid{
   display: grid;
@@ -1048,12 +1053,15 @@ export default {
   border-radius: 8px;
   background: rgba(255,255,255,.06);
   border: 1px solid rgba(255,255,255,.08);
+  max-width: 100%;
+  overflow: hidden;
 }
 .section-title{
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 .recovery-section h3{
   margin: 0;
@@ -1095,16 +1103,20 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 label{
   display: grid;
   gap: 6px;
   color: #90a0be;
   font-size: 12px;
+  min-width: 0;
 }
 input,
 select,
 button{
+  max-width: 100%;
+  min-width: 0;
   min-height: 40px;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,.12);
@@ -1123,6 +1135,7 @@ button{
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
 }
 button{
   cursor: pointer;
@@ -1137,6 +1150,7 @@ button{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 .metric-grid div{
   display: grid;
@@ -1144,6 +1158,7 @@ button{
   padding: 12px;
   border-radius: 8px;
   background: rgba(255,255,255,.04);
+  min-width: 0;
 }
 .metric-grid span,
 .recovery-row--head{
@@ -1153,6 +1168,8 @@ button{
 }
 .metric-grid strong{
   color: #fff;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .debug-warning{
   padding: 10px 12px;
@@ -1162,8 +1179,16 @@ button{
   border: 1px solid rgba(255,184,107,.18);
 }
 .recovery-table{
-  display: grid;
+  display: block;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 .recovery-row{
   display: grid;
@@ -1173,6 +1198,13 @@ button{
   padding: 10px;
   border-radius: 8px;
   background: rgba(255,255,255,.04);
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.recovery-row > span{
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .recovery-row--trades{
   grid-template-columns: minmax(54px, .55fr) minmax(70px, .65fr) minmax(72px, .7fr) minmax(48px, .45fr) minmax(74px, .7fr) minmax(86px, .8fr) minmax(86px, .8fr) minmax(132px, 1.05fr) minmax(86px, .8fr) minmax(110px, .95fr) minmax(120px, 1fr) minmax(180px, 1.35fr);
@@ -1198,6 +1230,7 @@ button{
 }
 .details-modal{
   width: min(980px, 96vw);
+  max-width: 100vw;
   height: 100vh;
   overflow: auto;
   display: grid;
@@ -1355,6 +1388,40 @@ button{
   padding: 10px;
 }
 @media (max-width: 760px){
+  .recovery-page{
+    gap: 12px;
+  }
+  .recovery-section{
+    padding: 12px;
+  }
+  .section-title{
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .summary-grid{
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .summary-card{
+    padding: 10px;
+  }
+  .summary-card strong{
+    font-size: 16px;
+  }
+  .recovery-form,
+  .metric-grid{
+    grid-template-columns: 1fr;
+  }
+  .action-row{
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .action-row button{
+    width: 100%;
+  }
+  .recovery-table{
+    overflow-x: auto;
+  }
   .recovery-row{
     grid-template-columns: 1fr 1fr;
   }
@@ -1387,6 +1454,25 @@ button{
   }
   .recovery-row--trades .trade-actions{
     justify-content: flex-end;
+  }
+  .details-backdrop{
+    justify-items: stretch;
+  }
+  .details-modal{
+    width: 100vw;
+    padding: 12px;
+    border-left: 0;
+  }
+  .detail-block{
+    padding: 10px;
+  }
+}
+@media (max-width: 480px){
+  .summary-grid{
+    grid-template-columns: 1fr;
+  }
+  .recovery-row{
+    grid-template-columns: 1fr;
   }
 }
 </style>

@@ -238,6 +238,7 @@
 <style scoped>
 .opportunities-panel{
   width: min(360px, calc(100vw - 30px));
+  display: none;
 }
 .opportunities-toggle{
   min-height: 42px;
