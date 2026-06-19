@@ -40,12 +40,32 @@ export const configDefaults = {
     side_quality_lookback_trades: 5,
     side_quality_cooldown_seconds: 600,
     ml_mode: "disabled",
+    ml_snapshot_capture_enabled: true,
+    ml_snapshot_sample_rate: 1,
+    ml_label_horizons_seconds: [10, 30, 60],
+    ml_max_snapshots_per_hour: 10000,
     signal_diagnostics_max_rows: 100,
 };
 
 const normalizeMlMode = value => {
     if (value === null || value === undefined || value === "") return configDefaults.ml_mode;
     return ["disabled", "shadow"].includes(value) ? value : configDefaults.ml_mode;
+};
+
+const normalizeMlLabelHorizons = value => {
+    let source = value;
+    if (typeof source === "string") {
+        try {
+            source = JSON.parse(source);
+        } catch (error) {
+            source = source.split(",");
+        }
+    }
+    const allowed = [10, 30, 60];
+    const normalized = Array.isArray(source)
+        ? source.map(item => Number(item)).filter(item => allowed.includes(item))
+        : configDefaults.ml_label_horizons_seconds;
+    return normalized.length ? Array.from(new Set(normalized)) : configDefaults.ml_label_horizons_seconds;
 };
 
 export const normalizeConfigForm = (form = {}) => ({
@@ -67,6 +87,10 @@ export const normalizeConfigForm = (form = {}) => ({
     side_quality_lookback_trades: Math.max(1, Number(form.side_quality_lookback_trades ?? configDefaults.side_quality_lookback_trades)),
     side_quality_cooldown_seconds: Math.max(0, Number(form.side_quality_cooldown_seconds ?? configDefaults.side_quality_cooldown_seconds)),
     ml_mode: normalizeMlMode(form.ml_mode),
+    ml_snapshot_capture_enabled: form.ml_snapshot_capture_enabled === undefined ? configDefaults.ml_snapshot_capture_enabled : Boolean(form.ml_snapshot_capture_enabled),
+    ml_snapshot_sample_rate: Math.min(1, Math.max(0, Number(form.ml_snapshot_sample_rate ?? configDefaults.ml_snapshot_sample_rate))),
+    ml_label_horizons_seconds: normalizeMlLabelHorizons(form.ml_label_horizons_seconds),
+    ml_max_snapshots_per_hour: Math.max(1, Number(form.ml_max_snapshots_per_hour ?? configDefaults.ml_max_snapshots_per_hour)),
     signal_diagnostics_max_rows: Math.min(500, Math.max(20, Number(form.signal_diagnostics_max_rows ?? configDefaults.signal_diagnostics_max_rows))),
 });
 

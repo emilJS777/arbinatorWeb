@@ -89,4 +89,12 @@ export default {
             },
         });
     },
+    exportMlMarketSnapshots(format = "csv") {
+        const params = new URLSearchParams({format});
+        return fetch(`${runtimeConfig.apiBaseUrl}/orderbook-recovery/ml/market-snapshots/export?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+            },
+        });
+    },
 };

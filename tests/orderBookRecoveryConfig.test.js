@@ -61,6 +61,10 @@ test('live config fields have defaults for UI binding', () => {
   assert.equal(form.side_quality_lookback_trades, 5);
   assert.equal(form.side_quality_cooldown_seconds, 600);
   assert.equal(form.ml_mode, 'disabled');
+  assert.equal(form.ml_snapshot_capture_enabled, true);
+  assert.equal(form.ml_snapshot_sample_rate, 1);
+  assert.deepEqual(form.ml_label_horizons_seconds, [10, 30, 60]);
+  assert.equal(form.ml_max_snapshots_per_hour, 10000);
 });
 
 test('save payload preserves live config fields', () => {
@@ -82,6 +86,10 @@ test('save payload preserves live config fields', () => {
     side_quality_lookback_trades: '4',
     side_quality_cooldown_seconds: '120',
     ml_mode: 'shadow',
+    ml_snapshot_capture_enabled: false,
+    ml_snapshot_sample_rate: '0.5',
+    ml_label_horizons_seconds: '[10, 60]',
+    ml_max_snapshots_per_hour: '300',
   });
   assert.equal(payload.execution_mode, 'live');
   assert.equal(payload.live_enabled_confirmation, true);
@@ -98,6 +106,10 @@ test('save payload preserves live config fields', () => {
   assert.equal(payload.side_quality_lookback_trades, 4);
   assert.equal(payload.side_quality_cooldown_seconds, 120);
   assert.equal(payload.ml_mode, 'shadow');
+  assert.equal(payload.ml_snapshot_capture_enabled, false);
+  assert.equal(payload.ml_snapshot_sample_rate, 0.5);
+  assert.deepEqual(payload.ml_label_horizons_seconds, [10, 60]);
+  assert.equal(payload.ml_max_snapshots_per_hour, 300);
 });
 
 test('normalize preserves ml shadow mode from backend config', () => {
