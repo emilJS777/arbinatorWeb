@@ -138,11 +138,29 @@ export default {
         });
       }).finally(() => this.emitter.emit("loader", false));
     },
-    start() {
+    async start() {
+      if (this.form) {
+        if (!this.form.exchange_id) {
+          this.emitter.emit("toster", {success: false, msg: "Select exchange"});
+          return;
+        }
+        if (!this.form.trading_pair_id) {
+          this.emitter.emit("toster", {success: false, msg: "Select trading pair"});
+          return;
+        }
+      }
       if ((this.form?.execution_mode || this.config?.execution_mode) === "live") {
         if (!window.confirm("You are enabling LIVE trading. Real orders may be placed on the exchange.")) return;
       }
       this.emitter.emit("loader", true);
+      if (this.form) {
+        const saveRes = await this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form));
+        if (!isResponseSuccess(saveRes)) {
+          this.emitter.emit("loader", false);
+          this.emitter.emit("toster", {success: false, msg: getResponseMessage(saveRes)});
+          return;
+        }
+      }
       this.$store.dispatch("orderBookRecovery/START").then(res => {
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
