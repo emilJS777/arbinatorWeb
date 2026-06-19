@@ -42,8 +42,8 @@ export default {
       <div class="nav-brand">
 <!--        <div class="nav-brand__badge">A</div>-->
         <div>
-          <span class="nav-brand__title">Arbi<span class="c-pallete-error-Error-50">Nator</span></span>
-          <span class="nav-brand__subtitle">Realtime scanner</span>
+          <span class="nav-brand__title">Arbi<span>Nator</span></span>
+          <span class="nav-brand__subtitle">Quant dashboard</span>
         </div>
       </div>
 
@@ -83,11 +83,13 @@ export default {
   gap: 16px;
   align-items: center;
   padding: 14px 18px;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
-  border: 1px solid rgba(255,255,255,0.09);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+  border-radius: 22px;
+  background:
+      linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.76)),
+      radial-gradient(circle at 25% 0%, rgba(124,58,237,.08), transparent 38%);
+  border: 1px solid rgba(124,58,237,0.12);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 18px 44px rgba(76, 29, 149, 0.10);
 }
 .nav-brand{
   display: flex;
@@ -109,14 +111,18 @@ export default {
 }
 .nav-brand__title{
   display: block;
-  color: #f7fbff;
+  color: #18181b;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 750;
+}
+.nav-brand__title span{
+  color: #7c3aed;
+  text-shadow: 0 8px 24px rgba(124,58,237,.18);
 }
 .nav-brand__subtitle{
   display: block;
   margin-top: 4px;
-  color: #90a0be;
+  color: #71717a;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .12em;
@@ -129,9 +135,10 @@ export default {
 }
 .nav-link,
 .nav-logout{
+  position: relative;
   border: 0;
   background: transparent;
-  color: #c7d2e5;
+  color: #52525b;
   border-radius: 999px;
   padding: 12px 16px;
   display: inline-flex;
@@ -144,21 +151,31 @@ export default {
 }
 .nav-link:hover,
 .nav-logout:hover{
-  background: rgba(255,255,255,0.07);
-  color: #fff;
+  background: rgba(124,58,237,.07);
+  color: #18181b;
   transform: translateY(-1px);
 }
 .nav-link--active{
-  background: linear-gradient(135deg, rgba(255,184,107,0.22), rgba(70,205,207,0.18));
-  color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  background: linear-gradient(180deg, #f3e8ff, #ffffff);
+  color: #6d28d9;
+  box-shadow: inset 0 0 0 1px rgba(124,58,237,0.18), 0 10px 22px rgba(124,58,237,.10);
+}
+.nav-link--active::after{
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7c3aed, #3b82f6);
 }
 .nav-actions{
   display: flex;
   justify-content: flex-end;
 }
 .nav-logout{
-  color: #ffcf9b;
+  color: #a16207;
 }
 @media (max-width: 1120px){
   .nav-bar{

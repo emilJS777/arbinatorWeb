@@ -130,7 +130,7 @@ export default {
 </script>
 
 <template>
-  <div :class="`dark-mode appBlock min-height-100vh app-shell`">
+  <div :class="`light-mode appBlock min-height-100vh app-shell`">
     <div class="app-background"></div>
     <div class="bg-mode-1 min-height-100vh app-shell__content">
       <v-message-modal v-if="this.messageModal" @close="this.messageModal = false" :message="this.messageModal"/>
@@ -139,7 +139,7 @@ export default {
       <v-alert-block @close="this.alert_title=false;this.alert_msg=false;" v-if="alert_msg" :title="this.alert_title" :msg="alert_msg"/>
       <div class="app-topbar">
         <div class="app-topbar__meta">
-          <span class="app-chip">Live Arbitrage Workspace</span>
+          <span class="app-chip">ArbiNator Quant Workspace</span>
           <span :class="`app-chip ${isSocketConnected ? 'app-chip--online' : 'app-chip--offline'}`">
             {{ isSocketConnected ? 'Scanner connected' : 'Scanner reconnecting' }}
           </span>
@@ -149,8 +149,8 @@ export default {
 
       <div class="app-hero m-0-auto">
         <div>
-          <p class="app-eyebrow margin-0">Control Center</p>
-          <h1 class="app-title margin-0">Monitor spreads, balances, and execution windows in one place.</h1>
+          <p class="app-eyebrow margin-0">Trading Research Platform</p>
+          <h1 class="app-title margin-0">Monitor markets, paper/live execution, and ML datasets from one calm workspace.</h1>
         </div>
         <div class="app-stats">
           <div class="app-stat-card">
@@ -187,10 +187,31 @@ export default {
   position: fixed;
   inset: 0;
   background:
-      radial-gradient(circle at top left, rgba(255, 166, 77, 0.18), transparent 28%),
-      radial-gradient(circle at top right, rgba(70, 205, 207, 0.14), transparent 24%),
-      radial-gradient(circle at bottom left, rgba(255, 107, 107, 0.12), transparent 26%);
+      radial-gradient(circle at top left, rgba(124, 58, 237, 0.10), transparent 32%),
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.08), transparent 28%),
+      radial-gradient(circle at 50% 18%, rgba(6, 182, 212, 0.055), transparent 30%),
+      linear-gradient(180deg, #fbfaff 0%, #f8fafc 45%, #ffffff 100%);
   pointer-events: none;
+}
+.app-background::before,
+.app-background::after{
+  content: "";
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 999px;
+  filter: blur(34px);
+  opacity: .42;
+}
+.app-background::before{
+  left: -120px;
+  top: 120px;
+  background: rgba(124, 58, 237, .10);
+}
+.app-background::after{
+  right: -120px;
+  top: 220px;
+  background: rgba(59, 130, 246, .09);
 }
 .app-shell__content{
   position: relative;
@@ -212,20 +233,22 @@ export default {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #d7deef;
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.72));
+  border: 1px solid rgba(124,58,237,0.13);
+  color: #52525b;
   font-size: 12px;
   letter-spacing: .04em;
   text-transform: uppercase;
 }
 .app-chip--online{
-  color: #d7ffe8;
-  border-color: rgba(53, 191, 127, 0.35);
+  color: #047857;
+  background: linear-gradient(180deg, rgba(236,253,245,.95), rgba(255,255,255,.75));
+  border-color: rgba(16, 185, 129, 0.24);
 }
 .app-chip--offline{
-  color: #ffe0b2;
-  border-color: rgba(255, 179, 71, 0.28);
+  color: #b45309;
+  background: linear-gradient(180deg, rgba(255,251,235,.96), rgba(255,255,255,.75));
+  border-color: rgba(245, 158, 11, 0.28);
 }
 .app-nav-wrap{
   margin-top: 12px;
@@ -239,19 +262,32 @@ export default {
   align-items: end;
 }
 .app-eyebrow{
-  color: #ffb86b;
+  color: #7c3aed;
   text-transform: uppercase;
   letter-spacing: .16em;
   font-size: 12px;
   font-weight: 600;
 }
+.app-eyebrow::before{
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  box-shadow: 0 0 0 5px rgba(124,58,237,.10);
+}
 .app-title{
   margin-top: 10px;
-  color: #f8fbff;
-  font-family: "DM Serif Display", serif;
-  font-size: clamp(34px, 4vw, 56px);
-  line-height: 1.02;
-  max-width: 840px;
+  color: #18181b;
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(30px, 3.5vw, 48px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  max-width: 920px;
+  text-wrap: balance;
 }
 .app-stats{
   display: grid;
@@ -259,16 +295,27 @@ export default {
   gap: 14px;
 }
 .app-stat-card{
+  position: relative;
+  overflow: hidden;
   padding: 18px;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.04));
-  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background:
+      linear-gradient(180deg, rgba(255,255,255,0.96), rgba(255,255,255,0.78)),
+      radial-gradient(circle at top right, rgba(124,58,237,.10), transparent 42%);
+  border: 1px solid rgba(124,58,237,0.11);
   backdrop-filter: blur(18px);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 18px 50px rgba(68, 64, 60, 0.10);
+}
+.app-stat-card::before{
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, #7c3aed, #3b82f6, #06b6d4);
 }
 .app-stat-label{
   display: block;
-  color: #9fafc7;
+  color: #71717a;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: .08em;
@@ -276,7 +323,7 @@ export default {
 .app-stat-value{
   display: block;
   margin-top: 12px;
-  color: #f8fbff;
+  color: #18181b;
   font-size: 34px;
   line-height: 1;
 }

@@ -1970,6 +1970,274 @@ button{
   color: #90a0be;
   padding: 10px;
 }
+
+/* Light fintech redesign overrides */
+.recovery-page{
+  color: #18181b;
+}
+.recovery-heading h2{
+  color: #18181b;
+  font-size: clamp(28px, 3.5vw, 44px);
+  font-weight: 650;
+  letter-spacing: -.03em;
+}
+.page-section-label{
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background:
+      linear-gradient(135deg, rgba(237,233,254,.72), rgba(239,246,255,.58)),
+      rgba(255,255,255,.56);
+  border: 1px solid rgba(124,58,237,.10);
+}
+.page-section-label span{
+  color: #18181b;
+  font-size: 15px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.page-section-label span::before{
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #3b82f6);
+  box-shadow: 0 0 0 6px rgba(124,58,237,.10);
+}
+.page-section-label p{
+  margin: 0;
+  color: #71717a;
+  font-size: 13px;
+}
+.summary-card,
+.recovery-section,
+.metric-grid div,
+.recovery-row,
+.detail-block,
+.details-section{
+  background:
+      linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.86)),
+      radial-gradient(circle at top right, rgba(124,58,237,.075), transparent 44%);
+  border: 1px solid rgba(124,58,237,.11);
+  box-shadow: 0 16px 40px rgba(76,29,149,.08);
+}
+.summary-card,
+.recovery-section,
+.metric-grid div,
+.recovery-row,
+.detail-block,
+.details-section,
+.pnl-badge{
+  border-radius: 16px;
+}
+.summary-card,
+.recovery-section{
+  position: relative;
+  overflow: hidden;
+}
+.summary-card::before,
+.recovery-section::before{
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(124,58,237,.70), rgba(59,130,246,.46), rgba(6,182,212,.34));
+}
+.summary-card.positive::before{
+  background: linear-gradient(90deg, #10b981, rgba(16,185,129,.24));
+}
+.summary-card.negative::before{
+  background: linear-gradient(90deg, #ef4444, rgba(239,68,68,.24));
+}
+.summary-card.neutral::before{
+  background: linear-gradient(90deg, rgba(124,58,237,.54), rgba(59,130,246,.32));
+}
+.summary-card span,
+.metric-grid span,
+.recovery-row--head,
+label,
+.inline-select,
+.pagination-row,
+.pnl-badge small,
+.raw-details{
+  color: #71717a;
+}
+.summary-card strong,
+.metric-grid strong,
+.recovery-section h3,
+.detail-block h4,
+.details-section h4,
+.neutral strong,
+.pnl-badge.neutral strong,
+.result-pill.open{
+  color: #18181b;
+}
+.recovery-eyebrow,
+.section-title span,
+.raw-details summary{
+  color: #7c3aed;
+}
+input,
+select,
+button{
+  background: #fff;
+  color: #18181b;
+  border-color: rgba(24,24,27,.12);
+}
+input:focus,
+select:focus{
+  outline: none;
+  border-color: rgba(124,58,237,.55);
+  box-shadow: 0 0 0 4px rgba(124,58,237,.12);
+}
+button{
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
+  box-shadow: 0 1px 2px rgba(24,24,27,.06);
+}
+button:hover:not(:disabled){
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(24,24,27,.12);
+}
+.button-danger{
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+}
+.check-row,
+.ml-tabs button,
+.recovery-row--head,
+.empty-row{
+  background: linear-gradient(135deg, #faf5ff, #f8fafc);
+  border: 1px solid rgba(124,58,237,.09);
+}
+.ml-tabs button{
+  color: #52525b;
+}
+.ml-tabs button.active{
+  background: linear-gradient(180deg, #ede9fe, #ffffff);
+  border-color: rgba(124,58,237,.28);
+  color: #6d28d9;
+}
+.mode-badge,
+.side-badge,
+.status-badge,
+.warning-chip{
+  border-radius: 999px;
+  font-weight: 650;
+}
+.mode-badge.paper,
+.status-badge.info,
+.pnl-badge.info{
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.mode-badge.live,
+.side-badge.short,
+.side-badge.sell,
+.status-badge.negative,
+.pnl-badge.negative{
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.side-badge.long,
+.side-badge.buy,
+.status-badge.positive,
+.pnl-badge.positive{
+  color: #059669;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+.debug-warning,
+.status-badge.warning,
+.warning-chip{
+  color: #d97706;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+.live-warning{
+  color: #dc2626;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+.positive strong,
+.pnl-badge.positive strong,
+.result-pill.win{
+  color: #059669;
+}
+.negative strong,
+.pnl-badge.negative strong,
+.result-pill.loss{
+  color: #dc2626;
+}
+.recovery-table{
+  background: rgba(255,255,255,.96);
+  border: 1px solid rgba(124,58,237,.10);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(76,29,149,.06);
+}
+.recovery-row{
+  box-shadow: none;
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  background: #fff;
+}
+.recovery-row:hover{
+  background: linear-gradient(90deg, rgba(237,233,254,.50), rgba(239,246,255,.38));
+}
+.recovery-row:last-child{
+  border-bottom: 0;
+}
+.details-backdrop{
+  background: rgba(24,24,27,.24);
+  backdrop-filter: blur(8px);
+}
+.details-modal{
+  background: #fff;
+  color: #18181b;
+  border-left-color: rgba(24,24,27,.10);
+  box-shadow: -24px 0 60px rgba(24,24,27,.16);
+}
+.details-header{
+  background: #fff;
+  border-bottom: 1px solid rgba(24,24,27,.10);
+}
+.details-header h3{
+  color: #18181b;
+}
+.details-header p{
+  color: #71717a;
+}
+.raw-block{
+  color: #27272a;
+  background: #f8fafc;
+  border-color: rgba(24,24,27,.10);
+}
+.config-group-title{
+  color: #18181b;
+  border-top: 1px solid rgba(24,24,27,.10);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.config-group-title::before{
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background:
+      radial-gradient(circle at 30% 25%, rgba(255,255,255,.86), transparent 28%),
+      linear-gradient(135deg, rgba(124,58,237,.88), rgba(59,130,246,.72));
+  box-shadow: 0 8px 18px rgba(124,58,237,.18);
+}
 @media (max-width: 760px){
   .recovery-page{
     gap: 12px;
