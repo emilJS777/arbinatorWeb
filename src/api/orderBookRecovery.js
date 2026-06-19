@@ -44,6 +44,9 @@ export default {
     getDebug() {
         return apiClient.get("/orderbook-recovery/debug");
     },
+    getMlStats() {
+        return apiClient.get("/orderbook-recovery/ml/stats");
+    },
     clearDiagnostics() {
         return apiClient.post("/orderbook-recovery/diagnostics/clear", {});
     },

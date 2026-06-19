@@ -12,6 +12,7 @@ export default {
       trades: state => state.orderBookRecovery.TRADES,
       metrics: state => state.orderBookRecovery.METRICS,
       debug: state => state.orderBookRecovery.DEBUG,
+      mlStats: state => state.orderBookRecovery.ML_STATS,
       scannerDiagnostics: state => state.orderBookRecovery.SCANNER_DIAGNOSTICS,
       showArchived: state => state.orderBookRecovery.SHOW_ARCHIVED,
     }),
@@ -48,14 +49,14 @@ export default {
       return null;
     },
     mlMarketSnapshotStats() {
-      const total = Number(this.debug?.ml_market_snapshots_count || 0);
-      const pending = Number(this.debug?.ml_market_snapshots_pending_count || 0);
-      const labeled = Number(this.debug?.ml_market_snapshots_labeled_count || 0);
+      const total = Number(this.mlStats?.ml_market_snapshots_count || 0);
+      const pending = Number(this.mlStats?.ml_market_snapshots_pending_count || 0);
+      const labeled = Number(this.mlStats?.ml_market_snapshots_labeled_count || 0);
       const completion = total > 0 ? (labeled / total) * 100 : 0;
-      const exchangeLabelsTotal = Number(this.debug?.ml_exchange_labels_count || 0);
-      const exchangeLabelsPending = Number(this.debug?.ml_exchange_labels_pending_count || 0);
-      const exchangeLabelsLabeled = Number(this.debug?.ml_exchange_labels_labeled_count || 0);
-      const exchangeLabelCompletion = Number(this.debug?.ml_exchange_label_completion_percent || 0);
+      const exchangeLabelsTotal = Number(this.mlStats?.ml_exchange_labels_count || 0);
+      const exchangeLabelsPending = Number(this.mlStats?.ml_exchange_labels_pending_count || 0);
+      const exchangeLabelsLabeled = Number(this.mlStats?.ml_exchange_labels_labeled_count || 0);
+      const exchangeLabelCompletion = Number(this.mlStats?.ml_exchange_label_completion_percent || 0);
       return {total, pending, labeled, completion, exchangeLabelsTotal, exchangeLabelsPending, exchangeLabelsLabeled, exchangeLabelCompletion};
     },
     mlExplorerTabs() {
@@ -951,6 +952,8 @@ export default {
 
     <section class="recovery-section">
       <h3>ML Market Snapshot Statistics</h3>
+      <div class="debug-warning" v-if="mlStats?.loading">Refreshing ML statistics...</div>
+      <div class="debug-warning" v-if="mlStats?.error">{{ mlStats.error }}</div>
       <div class="metric-grid">
         <div><span>Total market snapshots</span><strong>{{ mlMarketSnapshotStats.total }}</strong></div>
         <div><span>Pending labels</span><strong>{{ mlMarketSnapshotStats.pending }}</strong></div>

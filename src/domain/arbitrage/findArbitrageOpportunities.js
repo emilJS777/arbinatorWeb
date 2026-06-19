@@ -1,3 +1,5 @@
+import { normalizeArray, normalizeObjectValues } from "../../utils/safePayload.js";
+
 const toNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
@@ -6,7 +8,7 @@ const toNumber = (value) => {
 const buildTradingPairIndex = (tradingPairs = []) => {
     const index = {};
 
-    for (const tradingPair of tradingPairs) {
+    for (const tradingPair of normalizeArray(tradingPairs)) {
         const exchangeTitle = tradingPair?.exchange?.title;
         const pair = tradingPair?.pair;
 
@@ -30,9 +32,16 @@ export const findArbitrageOpportunities = (orderBooks, tradingPairs = []) => {
     const pairs = {};
     const pairLimits = {};
     const tradingPairIndex = buildTradingPairIndex(tradingPairs);
+    const orderBookEntries = Array.isArray(orderBooks)
+        ? orderBooks.map((item, index) => [item?.exchange || index, item?.pairs || item])
+        : Object.entries(orderBooks && typeof orderBooks === "object" ? orderBooks : {});
 
-    for (const [exchange, pairsObj] of Object.entries(orderBooks)) {
-        for (const [pair, data] of Object.entries(pairsObj)) {
+    for (const [exchange, pairsObj] of orderBookEntries) {
+        const pairEntries = Array.isArray(pairsObj)
+            ? normalizeObjectValues(pairsObj).map(item => [item?.pair, item])
+            : Object.entries(pairsObj && typeof pairsObj === "object" ? pairsObj : {});
+        for (const [pair, data] of pairEntries) {
+            if (!pair || !data || typeof data !== "object") continue;
             const {
                 purchaseHighPrice,
                 saleLowPrice,

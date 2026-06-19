@@ -1,4 +1,5 @@
 import { tradingPairsApi } from "@/api/tradingPairs.js";
+import { normalizeArray } from "@/utils/safePayload.js";
 
 const tradingPairs = {
     namespaced: true,
@@ -19,32 +20,37 @@ const tradingPairs = {
 
     mutations: {
         SET_TRADING_PAIRS(state, payload){
-            if (payload) { // Проверяем, что payload не равен null и не undefined
-                state.TRADING_PAIRS = payload.sort((a, b) => {
-                    if (a.exchange.title < b.exchange.title) return -1;
-                    if (a.exchange.title > b.exchange.title) return 1;
+            const items = normalizeArray(payload);
+            if (items.length) {
+                state.TRADING_PAIRS = items.sort((a, b) => {
+                    if ((a.exchange?.title || "") < (b.exchange?.title || "")) return -1;
+                    if ((a.exchange?.title || "") > (b.exchange?.title || "")) return 1;
                     return 0;
                 });
             }
             else
-                state.TRADING_PAIRS = payload;
+                state.TRADING_PAIRS = [];
         },
         SET_BALANCES(state, payload){
-            if(!payload.balance) return;
-            state.TRADING_PAIRS.map((tradingPair, index) => {
-                if(payload.exchange === tradingPair.exchange.title && !payload.pair){
-                    state.TRADING_PAIRS[index]['quote_symbol'] = payload.symbol
-                    state.TRADING_PAIRS[index]['total_quote'] = payload.balance.total
-                    state.TRADING_PAIRS[index]['used_quote'] = payload.balance.used
-                    state.TRADING_PAIRS[index]['free_quote'] = payload.balance.free
-                }
-                if(tradingPair.pair === payload.pair && payload.exchange === tradingPair.exchange.title){
-                    state.TRADING_PAIRS[index]['base_symbol'] = payload.symbol
-                    state.TRADING_PAIRS[index]['total_base'] = payload.balance.total
-                    state.TRADING_PAIRS[index]['used_base'] = payload.balance.used
-                    state.TRADING_PAIRS[index]['free_base'] = payload.balance.free
-                }
-            })
+            const events = normalizeArray(payload);
+            const tradingPairs = normalizeArray(state.TRADING_PAIRS);
+            for (const item of events) {
+                if (!item || typeof item !== "object" || !item.balance) continue;
+                tradingPairs.forEach((tradingPair, index) => {
+                    if(item.exchange === tradingPair?.exchange?.title && !item.pair){
+                        state.TRADING_PAIRS[index]['quote_symbol'] = item.symbol
+                        state.TRADING_PAIRS[index]['total_quote'] = item.balance.total
+                        state.TRADING_PAIRS[index]['used_quote'] = item.balance.used
+                        state.TRADING_PAIRS[index]['free_quote'] = item.balance.free
+                    }
+                    if(tradingPair?.pair === item.pair && item.exchange === tradingPair?.exchange?.title){
+                        state.TRADING_PAIRS[index]['base_symbol'] = item.symbol
+                        state.TRADING_PAIRS[index]['total_base'] = item.balance.total
+                        state.TRADING_PAIRS[index]['used_base'] = item.balance.used
+                        state.TRADING_PAIRS[index]['free_base'] = item.balance.free
+                    }
+                })
+            }
         }
     },
 

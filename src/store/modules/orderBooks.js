@@ -1,13 +1,15 @@
 import store from "@/store/index.js";
 import { findArbitrageOpportunities } from "@/domain/arbitrage/findArbitrageOpportunities.js";
+import { normalizeObjectValues } from "@/utils/safePayload.js";
 
 const nodes = {
     namespaced: true,
     mutations: {
         SET_ORDER_BOOKS(state, payload){
-            if(!payload.data.order_book) return;
-            const purchases = payload.data.order_book.purchases;
-            const sales = payload.data.order_book.sales;
+            if(!payload?.data?.order_book) return;
+            const purchases = Array.isArray(payload.data.order_book.purchases) ? payload.data.order_book.purchases : [];
+            const sales = Array.isArray(payload.data.order_book.sales) ? payload.data.order_book.sales : [];
+            if (!purchases.length || !sales.length) return;
 
             const purchaseHigh = purchases.reduce((max, current) => {
                 return current.price > max.price ? current : max;
@@ -40,7 +42,11 @@ const nodes = {
         },
 
         FIND_ARBITRAGE_OPPORTUNITY(state, orderBooks) {
-            state.ARBITRAGE_OPPORTUNITY = findArbitrageOpportunities(orderBooks, store.state.tradingPairs.TRADING_PAIRS);
+            const normalized = Array.isArray(orderBooks)
+                ? orderBooks
+                : (orderBooks && typeof orderBooks === "object" ? orderBooks : {});
+            normalizeObjectValues(normalized);
+            state.ARBITRAGE_OPPORTUNITY = findArbitrageOpportunities(normalized, store.state.tradingPairs.TRADING_PAIRS);
         }
 
 

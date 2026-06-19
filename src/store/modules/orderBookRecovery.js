@@ -1,5 +1,8 @@
 import orderBookRecoveryApi from "@/api/orderBookRecovery.js";
 import {normalizeConfigForm} from "@/utils/orderBookRecoveryConfig.js";
+import {isValidMlStats, normalizeArray} from "@/utils/safePayload.js";
+
+const safeRequest = promise => promise.catch(() => ({data: {success: false, obj: null}}));
 
 export default {
     namespaced: true,
@@ -10,19 +13,31 @@ export default {
         TRADES: [],
         METRICS: null,
         DEBUG: null,
+        ML_STATS: {
+            ml_market_snapshots_count: 0,
+            ml_market_snapshots_pending_count: 0,
+            ml_market_snapshots_labeled_count: 0,
+            ml_exchange_labels_count: 0,
+            ml_exchange_labels_pending_count: 0,
+            ml_exchange_labels_labeled_count: 0,
+            ml_exchange_label_completion_percent: 0,
+            loading: false,
+            error: "",
+        },
         SCANNER_DIAGNOSTICS: [],
         SHOW_ARCHIVED: false,
     },
     actions: {
         async LOAD({ commit, state }) {
-            const [config, options, stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
-                orderBookRecoveryApi.getConfig(),
-                orderBookRecoveryApi.getOptions(),
-                orderBookRecoveryApi.getState(),
-                orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
-                orderBookRecoveryApi.getMetrics(),
-                orderBookRecoveryApi.getDebug(),
-                orderBookRecoveryApi.getScannerDiagnostics(),
+            const [config, options, stateResponse, trades, metrics, debug, diagnostics, mlStats] = await Promise.all([
+                safeRequest(orderBookRecoveryApi.getConfig()),
+                safeRequest(orderBookRecoveryApi.getOptions()),
+                safeRequest(orderBookRecoveryApi.getState()),
+                safeRequest(orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED)),
+                safeRequest(orderBookRecoveryApi.getMetrics()),
+                safeRequest(orderBookRecoveryApi.getDebug()),
+                safeRequest(orderBookRecoveryApi.getScannerDiagnostics()),
+                safeRequest(orderBookRecoveryApi.getMlStats()),
             ]);
             if (config.data.success) commit("SET_CONFIG", config.data.obj);
             if (options.data.success) commit("SET_OPTIONS", options.data.obj);
@@ -31,21 +46,28 @@ export default {
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
             if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
             if (diagnostics.data.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
+            if (mlStats.data.success) commit("SET_ML_STATS", mlStats.data.obj);
             return stateResponse;
         },
         async LOAD_DEBUG({ commit, state }) {
-            const [stateResponse, trades, metrics, debug, diagnostics] = await Promise.all([
-                orderBookRecoveryApi.getState(),
-                orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
-                orderBookRecoveryApi.getMetrics(),
-                orderBookRecoveryApi.getDebug(),
-                orderBookRecoveryApi.getScannerDiagnostics(),
+            commit("SET_ML_STATS_LOADING", true);
+            const [stateResponse, trades, metrics, debug, diagnostics, mlStats] = await Promise.all([
+                safeRequest(orderBookRecoveryApi.getState()),
+                safeRequest(orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED)),
+                safeRequest(orderBookRecoveryApi.getMetrics()),
+                safeRequest(orderBookRecoveryApi.getDebug()),
+                safeRequest(orderBookRecoveryApi.getScannerDiagnostics()),
+                safeRequest(orderBookRecoveryApi.getMlStats()),
             ]);
             if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
             if (trades.data.success) commit("SET_TRADES", trades.data.obj);
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
             if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
+            if (!debug.data.success) commit("SET_ML_STATS_ERROR", "Debug request failed");
             if (diagnostics.data.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
+            if (mlStats.data.success) commit("SET_ML_STATS", mlStats.data.obj);
+            if (!mlStats.data.success) commit("SET_ML_STATS_ERROR", "ML stats request failed");
+            commit("SET_ML_STATS_LOADING", false);
             return debug;
         },
         async SAVE_CONFIG({ commit }, body) {
@@ -148,16 +170,50 @@ export default {
             state.STATE = payload;
         },
         SET_TRADES(state, payload) {
-            state.TRADES = payload || [];
+            state.TRADES = normalizeArray(payload);
         },
         SET_METRICS(state, payload) {
             state.METRICS = payload;
         },
         SET_DEBUG(state, payload) {
             state.DEBUG = payload;
+            if (isValidMlStats(payload)) {
+                state.ML_STATS = {
+                    ...state.ML_STATS,
+                    ml_market_snapshots_count: Number(payload.ml_market_snapshots_count),
+                    ml_market_snapshots_pending_count: Number(payload.ml_market_snapshots_pending_count),
+                    ml_market_snapshots_labeled_count: Number(payload.ml_market_snapshots_labeled_count),
+                    ml_exchange_labels_count: Number(payload.ml_exchange_labels_count),
+                    ml_exchange_labels_pending_count: Number(payload.ml_exchange_labels_pending_count),
+                    ml_exchange_labels_labeled_count: Number(payload.ml_exchange_labels_labeled_count),
+                    ml_exchange_label_completion_percent: Number(payload.ml_exchange_label_completion_percent || 0),
+                    error: "",
+                };
+            }
+        },
+        SET_ML_STATS(state, payload) {
+            if (isValidMlStats(payload)) {
+                state.ML_STATS = {
+                    ...state.ML_STATS,
+                    ml_market_snapshots_count: Number(payload.ml_market_snapshots_count),
+                    ml_market_snapshots_pending_count: Number(payload.ml_market_snapshots_pending_count),
+                    ml_market_snapshots_labeled_count: Number(payload.ml_market_snapshots_labeled_count),
+                    ml_exchange_labels_count: Number(payload.ml_exchange_labels_count),
+                    ml_exchange_labels_pending_count: Number(payload.ml_exchange_labels_pending_count),
+                    ml_exchange_labels_labeled_count: Number(payload.ml_exchange_labels_labeled_count),
+                    ml_exchange_label_completion_percent: Number(payload.ml_exchange_label_completion_percent || 0),
+                    error: "",
+                };
+            }
         },
         SET_SCANNER_DIAGNOSTICS(state, payload) {
-            state.SCANNER_DIAGNOSTICS = payload || [];
+            state.SCANNER_DIAGNOSTICS = normalizeArray(payload);
+        },
+        SET_ML_STATS_LOADING(state, payload) {
+            state.ML_STATS = {...state.ML_STATS, loading: Boolean(payload)};
+        },
+        SET_ML_STATS_ERROR(state, payload) {
+            state.ML_STATS = {...state.ML_STATS, error: payload || ""};
         },
         SET_SHOW_ARCHIVED(state, payload) {
             state.SHOW_ARCHIVED = Boolean(payload);
