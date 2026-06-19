@@ -1,8 +1,16 @@
 import orderBookRecoveryApi from "@/api/orderBookRecovery.js";
 import {normalizeConfigForm} from "@/utils/orderBookRecoveryConfig.js";
+import {createPollingRuntime, runPollingGroup} from "@/utils/pollingGuard.js";
 import {isValidMlStats, normalizeArray} from "@/utils/safePayload.js";
 
 const safeRequest = promise => promise.catch(() => ({data: {success: false, obj: null}}));
+const pollRuntime = createPollingRuntime();
+const runStorePollingGroup = (context, name, requests) => runPollingGroup({
+    runtime: pollRuntime,
+    name,
+    requests,
+    onUnavailableChange: value => context.commit("SET_BACKEND_TEMPORARILY_UNAVAILABLE", value),
+});
 
 export default {
     namespaced: true,
@@ -25,11 +33,15 @@ export default {
             error: "",
         },
         SCANNER_DIAGNOSTICS: [],
+        BACKEND_STATUS: {
+            temporarilyUnavailable: false,
+            warning: "",
+        },
         SHOW_ARCHIVED: false,
     },
     actions: {
         async LOAD({ commit, state }) {
-            const [config, options, stateResponse, trades, metrics, debug, diagnostics, mlStats] = await Promise.all([
+            const settled = await Promise.allSettled([
                 safeRequest(orderBookRecoveryApi.getConfig()),
                 safeRequest(orderBookRecoveryApi.getOptions()),
                 safeRequest(orderBookRecoveryApi.getState()),
@@ -39,6 +51,9 @@ export default {
                 safeRequest(orderBookRecoveryApi.getScannerDiagnostics()),
                 safeRequest(orderBookRecoveryApi.getMlStats()),
             ]);
+            const [config, options, stateResponse, trades, metrics, debug, diagnostics, mlStats] = settled.map(result =>
+                result.status === "fulfilled" ? result.value : {data: {success: false, obj: null}, status: 0}
+            );
             if (config.data.success) commit("SET_CONFIG", config.data.obj);
             if (options.data.success) commit("SET_OPTIONS", options.data.obj);
             if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
@@ -49,26 +64,70 @@ export default {
             if (mlStats.data.success) commit("SET_ML_STATS", mlStats.data.obj);
             return stateResponse;
         },
-        async LOAD_DEBUG({ commit, state }) {
-            commit("SET_ML_STATS_LOADING", true);
-            const [stateResponse, trades, metrics, debug, diagnostics, mlStats] = await Promise.all([
-                safeRequest(orderBookRecoveryApi.getState()),
-                safeRequest(orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED)),
-                safeRequest(orderBookRecoveryApi.getMetrics()),
-                safeRequest(orderBookRecoveryApi.getDebug()),
-                safeRequest(orderBookRecoveryApi.getScannerDiagnostics()),
-                safeRequest(orderBookRecoveryApi.getMlStats()),
+        async LOAD_STATUS(context) {
+            const {commit} = context;
+            const {responses, skipped} = await runStorePollingGroup(context, "status", [
+                () => orderBookRecoveryApi.getState(),
+                () => orderBookRecoveryApi.getMetrics(),
             ]);
-            if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
-            if (trades.data.success) commit("SET_TRADES", trades.data.obj);
-            if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
-            if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
-            if (!debug.data.success) commit("SET_ML_STATS_ERROR", "Debug request failed");
-            if (diagnostics.data.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
-            if (mlStats.data.success) commit("SET_ML_STATS", mlStats.data.obj);
-            if (!mlStats.data.success) commit("SET_ML_STATS_ERROR", "ML stats request failed");
+            if (skipped) return {skipped: true};
+            const [stateResponse, metrics] = responses;
+            if (stateResponse?.data?.success) commit("SET_STATE", stateResponse.data.obj);
+            if (metrics?.data?.success) commit("SET_METRICS", metrics.data.obj);
+            return stateResponse;
+        },
+        async LOAD_TRADES(context) {
+            const {commit, state} = context;
+            const {responses, skipped} = await runStorePollingGroup(context, "trades", [
+                () => orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED),
+            ]);
+            if (skipped) return {skipped: true};
+            const [trades] = responses;
+            if (trades?.data?.success) commit("SET_TRADES", trades.data.obj);
+            return trades;
+        },
+        async LOAD_ML_STATS(context) {
+            const {commit} = context;
+            commit("SET_ML_STATS_LOADING", true);
+            const {responses, skipped} = await runStorePollingGroup(context, "mlStats", [
+                () => orderBookRecoveryApi.getMlStats(),
+            ]);
+            if (skipped) {
+                commit("SET_ML_STATS_LOADING", false);
+                return {skipped: true};
+            }
+            const [mlStats] = responses;
+            if (mlStats?.data?.success) commit("SET_ML_STATS", mlStats.data.obj);
+            if (!mlStats?.data?.success) commit("SET_ML_STATS_ERROR", "ML stats request failed");
             commit("SET_ML_STATS_LOADING", false);
+            return mlStats;
+        },
+        async LOAD_DIAGNOSTICS(context) {
+            const {commit} = context;
+            const {responses, skipped} = await runStorePollingGroup(context, "diagnostics", [
+                () => orderBookRecoveryApi.getDebug(),
+                () => orderBookRecoveryApi.getScannerDiagnostics(),
+            ]);
+            if (skipped) return {skipped: true};
+            const [debug, diagnostics] = responses;
+            if (debug?.data?.success) commit("SET_DEBUG", debug.data.obj);
+            if (diagnostics?.data?.success) commit("SET_SCANNER_DIAGNOSTICS", diagnostics.data.obj);
             return debug;
+        },
+        async LOAD_DEBUG({ dispatch }) {
+            if (pollRuntime.loadDebugInFlight) return {skipped: true};
+            pollRuntime.loadDebugInFlight = true;
+            try {
+                const results = await Promise.allSettled([
+                    dispatch("LOAD_STATUS"),
+                    dispatch("LOAD_TRADES"),
+                    dispatch("LOAD_ML_STATS"),
+                    dispatch("LOAD_DIAGNOSTICS"),
+                ]);
+                return {success: true, results};
+            } finally {
+                pollRuntime.loadDebugInFlight = false;
+            }
         },
         async SAVE_CONFIG({ commit }, body) {
             const res = await orderBookRecoveryApi.updateConfig(body);
@@ -208,6 +267,13 @@ export default {
         },
         SET_SCANNER_DIAGNOSTICS(state, payload) {
             state.SCANNER_DIAGNOSTICS = normalizeArray(payload);
+        },
+        SET_BACKEND_TEMPORARILY_UNAVAILABLE(state, payload) {
+            state.BACKEND_STATUS = {
+                ...state.BACKEND_STATUS,
+                temporarilyUnavailable: Boolean(payload),
+                warning: payload ? "Backend temporarily unavailable. Showing last successful data." : "",
+            };
         },
         SET_ML_STATS_LOADING(state, payload) {
             state.ML_STATS = {...state.ML_STATS, loading: Boolean(payload)};

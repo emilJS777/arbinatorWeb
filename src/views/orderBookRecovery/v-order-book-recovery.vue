@@ -14,6 +14,7 @@ export default {
       debug: state => state.orderBookRecovery.DEBUG,
       mlStats: state => state.orderBookRecovery.ML_STATS,
       scannerDiagnostics: state => state.orderBookRecovery.SCANNER_DIAGNOSTICS,
+      backendStatus: state => state.orderBookRecovery.BACKEND_STATUS,
       showArchived: state => state.orderBookRecovery.SHOW_ARCHIVED,
     }),
     recoveryState() {
@@ -84,6 +85,7 @@ export default {
     return {
       form: null,
       poller: null,
+      pollers: [],
       decisionDetails: null,
       mlExplorerDetail: null,
       mlExplorerDetailLoading: false,
@@ -118,7 +120,7 @@ export default {
   mounted() {
     this.load();
     this.loadMlExplorer();
-    this.poller = setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DEBUG"), 2000);
+    this.startPolling();
     this.emitter.on("orderbook_recovery.position_opened", () => this.load());
     this.emitter.on("orderbook_recovery.position_closed", () => this.load());
     this.emitter.on("orderbook_recovery.started", () => this.load());
@@ -126,6 +128,8 @@ export default {
   },
   beforeUnmount() {
     if (this.poller) clearInterval(this.poller);
+    this.pollers.forEach(poller => clearInterval(poller));
+    this.pollers = [];
   },
   watch: {
     config: {
@@ -145,6 +149,19 @@ export default {
   methods: {
     load() {
       this.$store.dispatch("orderBookRecovery/LOAD");
+    },
+    startPolling() {
+      this.pollers.forEach(poller => clearInterval(poller));
+      this.pollers = [
+        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_STATUS"), 5000),
+        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_TRADES"), 12000),
+        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS"), 25000),
+        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS"), 45000),
+      ];
+      this.$store.dispatch("orderBookRecovery/LOAD_STATUS");
+      this.$store.dispatch("orderBookRecovery/LOAD_TRADES");
+      this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS");
+      this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS");
     },
     syncFormSelection() {
       if (!this.config || !this.options) return;
@@ -714,6 +731,9 @@ export default {
     <div class="recovery-heading">
       <p class="recovery-eyebrow margin-0">Paper Futures</p>
       <h2 class="c-mode-1 margin-0">OrderBook Recovery</h2>
+    </div>
+    <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
+      {{ backendStatus.warning || 'Backend temporarily unavailable. Showing last successful data.' }}
     </div>
 
     <section class="summary-grid">
