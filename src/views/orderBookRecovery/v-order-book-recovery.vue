@@ -86,6 +86,9 @@ export default {
       poller: null,
       decisionDetails: null,
       mlExplorerDetail: null,
+      mlExplorerDetailLoading: false,
+      mlExplorerDetailError: "",
+      mlExplorerDetailRequest: null,
       manualMarginValue: null,
       mlExplorer: {
         active: "feature",
@@ -534,16 +537,36 @@ export default {
     },
     openMlExplorerDetail(row) {
       const dataset = this.mlExplorer.active;
-      this.$store.dispatch("orderBookRecovery/LOAD_ML_DATASET_DETAIL", {dataset, id: row.id}).then(res => {
-        if (isResponseSuccess(res)) {
+      this.loadMlExplorerDetail(dataset, row.id, row);
+    },
+    loadMlExplorerDetail(dataset, id, fallback = null) {
+      this.mlExplorerDetail = {dataset, item: fallback || {id}};
+      this.mlExplorerDetailRequest = {dataset, id, fallback};
+      this.mlExplorerDetailError = "";
+      this.mlExplorerDetailLoading = true;
+      this.$store.dispatch("orderBookRecovery/LOAD_ML_DATASET_DETAIL", {dataset, id}).then(res => {
+        if (isResponseSuccess(res) && res.data?.obj && typeof res.data.obj === "object") {
           this.mlExplorerDetail = {dataset, item: res.data.obj};
           return;
         }
-        this.emitter.emit("toster", {success: false, msg: getResponseMessage(res)});
+        this.mlExplorerDetailError = "Failed to load record details";
+        this.emitter.emit("toster", {success: false, msg: getResponseMessage(res) || this.mlExplorerDetailError});
+      }).catch(error => {
+        this.mlExplorerDetailError = "Failed to load record details";
+        this.emitter.emit("toster", {success: false, msg: error?.message || this.mlExplorerDetailError});
+      }).finally(() => {
+        this.mlExplorerDetailLoading = false;
       });
+    },
+    retryMlExplorerDetail() {
+      if (!this.mlExplorerDetailRequest) return;
+      const {dataset, id, fallback} = this.mlExplorerDetailRequest;
+      this.loadMlExplorerDetail(dataset, id, fallback);
     },
     closeMlExplorerDetail() {
       this.mlExplorerDetail = null;
+      this.mlExplorerDetailError = "";
+      this.mlExplorerDetailRequest = null;
     },
     copyMlExplorerJson() {
       navigator.clipboard?.writeText(JSON.stringify(this.mlExplorerDetail?.item || {}, null, 2));
@@ -1237,6 +1260,11 @@ export default {
             <button @click="closeMlExplorerDetail"><i class="fa-solid fa-xmark"></i></button>
           </div>
         </div>
+        <div class="debug-warning" v-if="mlExplorerDetailLoading">Loading record details...</div>
+        <div class="debug-warning detail-error-row" v-if="mlExplorerDetailError">
+          <span>{{ mlExplorerDetailError }}</span>
+          <button @click="retryMlExplorerDetail"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+        </div>
         <div class="details-section">
           <h4>Main fields</h4>
           <div class="metric-grid">
@@ -1686,6 +1714,15 @@ button{
   color: #ffcf9b;
   background: rgba(255,184,107,.10);
   border: 1px solid rgba(255,184,107,.18);
+}
+.detail-error-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.detail-error-row button{
+  flex: 0 0 auto;
 }
 .recovery-table{
   display: block;
