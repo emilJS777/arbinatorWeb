@@ -47,6 +47,13 @@ export default {
       if (shortCount / finalRows.length > 0.9) return "Side bias detected: mostly short. Check thresholds and diagnostics.";
       return null;
     },
+    mlMarketSnapshotStats() {
+      const total = Number(this.debug?.ml_market_snapshots_count || 0);
+      const pending = Number(this.debug?.ml_market_snapshots_pending_count || 0);
+      const labeled = Number(this.debug?.ml_market_snapshots_labeled_count || 0);
+      const completion = total > 0 ? (labeled / total) * 100 : 0;
+      return {total, pending, labeled, completion};
+    },
   },
   data() {
     return {
@@ -751,6 +758,16 @@ export default {
     </section>
 
     <section class="recovery-section">
+      <h3>ML Market Snapshot Statistics</h3>
+      <div class="metric-grid">
+        <div><span>Total market snapshots</span><strong>{{ mlMarketSnapshotStats.total }}</strong></div>
+        <div><span>Pending labels</span><strong>{{ mlMarketSnapshotStats.pending }}</strong></div>
+        <div><span>Labeled snapshots</span><strong>{{ mlMarketSnapshotStats.labeled }}</strong></div>
+        <div><span>Label completion</span><strong>{{ fmt(mlMarketSnapshotStats.completion, 2) }}%</strong></div>
+      </div>
+    </section>
+
+    <section class="recovery-section">
       <div class="section-title">
         <h3>Signal Diagnostics</h3>
         <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i> Clear diagnostics</button>
@@ -772,9 +789,6 @@ export default {
         <div><span>ML mode</span><strong>{{ config?.ml_mode || 'disabled' }}</strong></div>
         <div><span>ML score</span><strong>{{ debug?.ml_score ?? '-' }}</strong></div>
         <div><span>ML decision</span><strong>{{ debug?.ml_decision || '-' }}</strong></div>
-        <div><span>Market snapshots</span><strong>{{ debug?.ml_market_snapshots_count ?? 0 }}</strong></div>
-        <div><span>Pending labels</span><strong>{{ debug?.ml_market_snapshots_pending_count ?? 0 }}</strong></div>
-        <div><span>Labeled snapshots</span><strong>{{ debug?.ml_market_snapshots_labeled_count ?? 0 }}</strong></div>
       </div>
       <div class="debug-warning" v-if="sideBiasWarning">{{ sideBiasWarning }}</div>
       <div class="action-row">
