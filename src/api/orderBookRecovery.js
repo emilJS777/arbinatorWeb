@@ -97,4 +97,12 @@ export default {
             },
         });
     },
+    exportMlExchangeLabels(format = "csv") {
+        const params = new URLSearchParams({format});
+        return fetch(`${runtimeConfig.apiBaseUrl}/orderbook-recovery/ml/exchange-labels/export?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+            },
+        });
+    },
 };

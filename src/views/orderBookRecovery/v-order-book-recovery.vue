@@ -52,7 +52,11 @@ export default {
       const pending = Number(this.debug?.ml_market_snapshots_pending_count || 0);
       const labeled = Number(this.debug?.ml_market_snapshots_labeled_count || 0);
       const completion = total > 0 ? (labeled / total) * 100 : 0;
-      return {total, pending, labeled, completion};
+      const exchangeLabelsTotal = Number(this.debug?.ml_exchange_labels_count || 0);
+      const exchangeLabelsPending = Number(this.debug?.ml_exchange_labels_pending_count || 0);
+      const exchangeLabelsLabeled = Number(this.debug?.ml_exchange_labels_labeled_count || 0);
+      const exchangeLabelCompletion = Number(this.debug?.ml_exchange_label_completion_percent || 0);
+      return {total, pending, labeled, completion, exchangeLabelsTotal, exchangeLabelsPending, exchangeLabelsLabeled, exchangeLabelCompletion};
     },
   },
   data() {
@@ -483,6 +487,26 @@ export default {
         link.remove();
       });
     },
+    exportMlExchangeLabels(format = "csv") {
+      this.$store.dispatch("orderBookRecovery/EXPORT_ML_EXCHANGE_LABELS", {format}).then(async response => {
+        if (!response?.ok) {
+          this.emitter.emit("toster", {success: false, msg: "ML exchange labels export failed"});
+          return;
+        }
+        const blob = await response.blob();
+        const now = new Date();
+        const pad = value => String(value).padStart(2, "0");
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}`;
+        const extension = format === "json" ? "json" : "csv";
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `orderbook-recovery-ml-exchange-labels-${stamp}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        link.remove();
+      });
+    },
     detail(path, fallback = "-") {
       const parts = path.split(".");
       let value = this.decisionDetails;
@@ -764,6 +788,10 @@ export default {
         <div><span>Pending labels</span><strong>{{ mlMarketSnapshotStats.pending }}</strong></div>
         <div><span>Labeled snapshots</span><strong>{{ mlMarketSnapshotStats.labeled }}</strong></div>
         <div><span>Label completion</span><strong>{{ fmt(mlMarketSnapshotStats.completion, 2) }}%</strong></div>
+        <div><span>Exchange labels total</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsTotal }}</strong></div>
+        <div><span>Pending exchange labels</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsPending }}</strong></div>
+        <div><span>Labeled exchange labels</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsLabeled }}</strong></div>
+        <div><span>Exchange label completion</span><strong>{{ fmt(mlMarketSnapshotStats.exchangeLabelCompletion, 2) }}%</strong></div>
       </div>
     </section>
 
@@ -796,6 +824,8 @@ export default {
         <button @click="exportMlDataset('json')"><i class="fa-solid fa-file-code"></i> Export ML JSON</button>
         <button @click="exportMlMarketSnapshots('csv')"><i class="fa-solid fa-table"></i> Export market snapshots</button>
         <button @click="exportMlMarketSnapshots('json')"><i class="fa-solid fa-file-code"></i> Export market JSON</button>
+        <button @click="exportMlExchangeLabels('csv')"><i class="fa-solid fa-layer-group"></i> Export exchange labels</button>
+        <button @click="exportMlExchangeLabels('json')"><i class="fa-solid fa-file-code"></i> Export labels JSON</button>
       </div>
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>ML score</span><span>ML decision</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Skip</span><span>Reject</span><span>L win</span><span>S win</span></div>
