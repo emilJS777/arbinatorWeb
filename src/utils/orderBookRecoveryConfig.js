@@ -43,6 +43,11 @@ export const configDefaults = {
     signal_diagnostics_max_rows: 100,
 };
 
+const normalizeMlMode = value => {
+    if (value === null || value === undefined || value === "") return configDefaults.ml_mode;
+    return ["disabled", "shadow"].includes(value) ? value : configDefaults.ml_mode;
+};
+
 export const normalizeConfigForm = (form = {}) => ({
     ...configDefaults,
     ...form,
@@ -61,7 +66,7 @@ export const normalizeConfigForm = (form = {}) => ({
     side_quality_filter_enabled: Boolean(form.side_quality_filter_enabled),
     side_quality_lookback_trades: Math.max(1, Number(form.side_quality_lookback_trades ?? configDefaults.side_quality_lookback_trades)),
     side_quality_cooldown_seconds: Math.max(0, Number(form.side_quality_cooldown_seconds ?? configDefaults.side_quality_cooldown_seconds)),
-    ml_mode: ["disabled", "shadow"].includes(form.ml_mode) ? form.ml_mode : configDefaults.ml_mode,
+    ml_mode: normalizeMlMode(form.ml_mode),
     signal_diagnostics_max_rows: Math.min(500, Math.max(20, Number(form.signal_diagnostics_max_rows ?? configDefaults.signal_diagnostics_max_rows))),
 });
 

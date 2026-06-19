@@ -99,3 +99,8 @@ test('save payload preserves live config fields', () => {
   assert.equal(payload.side_quality_cooldown_seconds, 120);
   assert.equal(payload.ml_mode, 'shadow');
 });
+
+test('normalize preserves ml shadow mode from backend config', () => {
+  const form = normalizeConfigForm({ml_mode: 'shadow'});
+  assert.equal(form.ml_mode, 'shadow');
+});
