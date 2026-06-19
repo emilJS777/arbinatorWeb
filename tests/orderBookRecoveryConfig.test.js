@@ -60,6 +60,7 @@ test('live config fields have defaults for UI binding', () => {
   assert.equal(form.side_quality_filter_enabled, false);
   assert.equal(form.side_quality_lookback_trades, 5);
   assert.equal(form.side_quality_cooldown_seconds, 600);
+  assert.equal(form.ml_mode, 'disabled');
 });
 
 test('save payload preserves live config fields', () => {
@@ -80,6 +81,7 @@ test('save payload preserves live config fields', () => {
     side_quality_filter_enabled: true,
     side_quality_lookback_trades: '4',
     side_quality_cooldown_seconds: '120',
+    ml_mode: 'shadow',
   });
   assert.equal(payload.execution_mode, 'live');
   assert.equal(payload.live_enabled_confirmation, true);
@@ -95,4 +97,5 @@ test('save payload preserves live config fields', () => {
   assert.equal(payload.side_quality_filter_enabled, true);
   assert.equal(payload.side_quality_lookback_trades, 4);
   assert.equal(payload.side_quality_cooldown_seconds, 120);
+  assert.equal(payload.ml_mode, 'shadow');
 });

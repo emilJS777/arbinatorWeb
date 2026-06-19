@@ -118,6 +118,9 @@ export default {
         async EXPORT_TRADES(context, payload = {}) {
             return orderBookRecoveryApi.exportTrades(payload.format || "csv", Boolean(payload.includeArchived));
         },
+        async EXPORT_ML_DATASET(context, payload = {}) {
+            return orderBookRecoveryApi.exportMlDataset(payload.format || "csv");
+        },
     },
     mutations: {
         SET_CONFIG(state, payload) {

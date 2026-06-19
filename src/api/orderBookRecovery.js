@@ -81,4 +81,12 @@ export default {
             },
         });
     },
+    exportMlDataset(format = "csv") {
+        const params = new URLSearchParams({format});
+        return fetch(`${runtimeConfig.apiBaseUrl}/orderbook-recovery/ml/dataset/export?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+            },
+        });
+    },
 };

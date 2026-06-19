@@ -418,6 +418,26 @@ export default {
         link.remove();
       });
     },
+    exportMlDataset(format = "csv") {
+      this.$store.dispatch("orderBookRecovery/EXPORT_ML_DATASET", {format}).then(async response => {
+        if (!response?.ok) {
+          this.emitter.emit("toster", {success: false, msg: "ML dataset export failed"});
+          return;
+        }
+        const blob = await response.blob();
+        const now = new Date();
+        const pad = value => String(value).padStart(2, "0");
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}`;
+        const extension = format === "json" ? "json" : "csv";
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `orderbook-recovery-ml-dataset-${stamp}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        link.remove();
+      });
+    },
     detail(path, fallback = "-") {
       const parts = path.split(".");
       let value = this.decisionDetails;
@@ -549,6 +569,12 @@ export default {
         <label class="check-row"><input v-model="form.side_quality_filter_enabled" type="checkbox"/> Profit protection: side quality</label>
         <label>Side quality lookback<input v-model.number="form.side_quality_lookback_trades" type="number" min="1"/></label>
         <label>Side quality cooldown sec<input v-model.number="form.side_quality_cooldown_seconds" type="number" min="0"/></label>
+        <label>ML mode
+          <select v-model="form.ml_mode">
+            <option value="disabled">Disabled</option>
+            <option value="shadow">Shadow</option>
+          </select>
+        </label>
         <label>Signal diagnostics max rows<input v-model.number="form.signal_diagnostics_max_rows" type="number" min="20" max="500" step="1"/></label>
         <label>Paper equity<input v-model.number="form.paper_equity_usdt" type="number"/></label>
         <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/> Consensus enabled</label>
@@ -702,10 +728,17 @@ export default {
         <div><span>Final long</span><strong>{{ debug?.final_long_count ?? 0 }}</strong></div>
         <div><span>Final short</span><strong>{{ debug?.final_short_count ?? 0 }}</strong></div>
         <div><span>Max rows</span><strong>{{ config?.signal_diagnostics_max_rows ?? 100 }}</strong></div>
+        <div><span>ML mode</span><strong>{{ config?.ml_mode || 'disabled' }}</strong></div>
+        <div><span>ML score</span><strong>{{ debug?.ml_score ?? '-' }}</strong></div>
+        <div><span>ML decision</span><strong>{{ debug?.ml_decision || '-' }}</strong></div>
       </div>
       <div class="debug-warning" v-if="sideBiasWarning">{{ sideBiasWarning }}</div>
+      <div class="action-row">
+        <button @click="exportMlDataset('csv')"><i class="fa-solid fa-database"></i> Export ML dataset</button>
+        <button @click="exportMlDataset('json')"><i class="fa-solid fa-file-code"></i> Export ML JSON</button>
+      </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Skip</span><span>Reject</span><span>L win</span><span>S win</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>ML score</span><span>ML decision</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Skip</span><span>Reject</span><span>L win</span><span>S win</span></div>
         <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
           <span>{{ dt(row.timestamp) }}</span>
           <span>{{ fmt(row.median_imbalance, 4) }}</span>
@@ -716,6 +749,8 @@ export default {
           <span>{{ fmt(row.short_ratio, 2) }}</span>
           <span>{{ row.proposed_side || 'none' }}</span>
           <span>{{ row.final_side || 'none' }}</span>
+          <span>{{ row.ml_score ?? '-' }}</span>
+          <span>{{ row.ml_decision || '-' }}</span>
           <span>{{ row.short_threshold_hit ? 'yes' : 'no' }}</span>
           <span>{{ row.configured_exchange_long_signal ? 'L' : '-' }} / {{ row.configured_exchange_short_signal ? 'S' : '-' }}</span>
           <span>C:{{ row.short_blocked_by_consensus ? 'yes' : 'no' }} CFG:{{ row.short_blocked_by_configured_exchange ? 'yes' : 'no' }} FB:{{ row.short_blocked_by_feedback ? 'yes' : 'no' }}</span>
@@ -949,6 +984,18 @@ export default {
           <div class="metric-grid">
             <div><span>Approved</span><strong>{{ detail('risk.approved') }}</strong></div>
             <div><span>Reason</span><strong>{{ detail('risk.reason') }}</strong></div>
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <h4>ML Shadow</h4>
+          <div class="metric-grid">
+            <div><span>Score</span><strong>{{ detail('ml.ml_score') }}</strong></div>
+            <div><span>Decision</span><strong>{{ detail('ml.ml_decision') }}</strong></div>
+            <div><span>Reason</span><strong>{{ detail('ml.ml_reason') }}</strong></div>
+            <div><span>Model version</span><strong>{{ detail('ml.ml_model_version') }}</strong></div>
+            <div><span>Evaluation</span><strong>{{ detail('ml.evaluation_id') }}</strong></div>
+            <div><span>Snapshot at</span><strong>{{ dt(detail('ml.timestamp')) }}</strong></div>
           </div>
         </div>
 
@@ -1376,8 +1423,8 @@ button{
   min-width: 1120px;
 }
 .recovery-row--signal-diagnostics{
-  grid-template-columns: minmax(150px, 1.2fr) repeat(6, minmax(72px, .65fr)) minmax(88px, .75fr) minmax(78px, .65fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(220px, 1.7fr) minmax(130px, 1fr) minmax(160px, 1.2fr) minmax(72px, .6fr) minmax(72px, .6fr);
-  min-width: 2030px;
+  grid-template-columns: minmax(150px, 1.2fr) repeat(6, minmax(72px, .65fr)) minmax(88px, .75fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(100px, .85fr) minmax(78px, .65fr) minmax(82px, .7fr) minmax(180px, 1.4fr) minmax(180px, 1.4fr) minmax(220px, 1.7fr) minmax(130px, 1fr) minmax(160px, 1.2fr) minmax(72px, .6fr) minmax(72px, .6fr);
+  min-width: 2250px;
 }
 .recovery-row--consensus{
   grid-template-columns: repeat(10, minmax(0, 1fr));
