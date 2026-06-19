@@ -58,17 +58,62 @@ export default {
       const exchangeLabelCompletion = Number(this.debug?.ml_exchange_label_completion_percent || 0);
       return {total, pending, labeled, completion, exchangeLabelsTotal, exchangeLabelsPending, exchangeLabelsLabeled, exchangeLabelCompletion};
     },
+    mlExplorerTabs() {
+      return [
+        {key: "feature", label: "Feature snapshots"},
+        {key: "market", label: "Market snapshots"},
+        {key: "price_history", label: "Price history"},
+        {key: "exchange_label", label: "Exchange labels"},
+      ];
+    },
+    activeMlExplorerData() {
+      return this.mlExplorer.datasets[this.mlExplorer.active] || {items: [], page: 1, page_size: 50, total: 0, total_pages: 0};
+    },
+    activeMlExplorerColumns() {
+      const common = {
+        feature: ["id", "timestamp", "exchange", "symbol", "proposed_side", "final_side", "result", "ml_score"],
+        market: ["id", "timestamp", "exchange", "symbol", "reference_price", "label_status", "future_return_10s", "mfe_long_10s", "mae_long_10s"],
+        price_history: ["id", "timestamp", "exchange", "symbol", "mid_price", "bid", "ask", "spread"],
+        exchange_label: ["id", "snapshot_id", "exchange", "symbol", "reference_price", "label_status", "future_return_10s", "mfe_long_10s", "mae_long_10s"],
+      };
+      return common[this.mlExplorer.active] || common.feature;
+    },
   },
   data() {
     return {
       form: null,
       poller: null,
       decisionDetails: null,
+      mlExplorerDetail: null,
       manualMarginValue: null,
+      mlExplorer: {
+        active: "feature",
+        loading: false,
+        error: "",
+        datasets: {
+          feature: {items: [], page: 1, page_size: 50, total: 0, total_pages: 0},
+          market: {items: [], page: 1, page_size: 50, total: 0, total_pages: 0},
+          price_history: {items: [], page: 1, page_size: 50, total: 0, total_pages: 0},
+          exchange_label: {items: [], page: 1, page_size: 50, total: 0, total_pages: 0},
+        },
+        filters: {
+          symbol: "",
+          exchange: "",
+          date_from: "",
+          date_to: "",
+          side: "",
+          result: "",
+          label_status: "",
+          has_ml_score: "",
+          sort_by: "timestamp",
+          sort_dir: "desc",
+        },
+      },
     };
   },
   mounted() {
     this.load();
+    this.loadMlExplorer();
     this.poller = setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DEBUG"), 2000);
     this.emitter.on("orderbook_recovery.position_opened", () => this.load());
     this.emitter.on("orderbook_recovery.position_closed", () => this.load());
@@ -414,6 +459,129 @@ export default {
     },
     closeDetails() {
       this.decisionDetails = null;
+    },
+    mlExplorerParams(overrides = {}) {
+      const data = this.activeMlExplorerData;
+      const filters = this.mlExplorer.filters;
+      const params = {
+        page: data.page || 1,
+        page_size: data.page_size || 50,
+        symbol: filters.symbol,
+        exchange: filters.exchange,
+        date_from: filters.date_from,
+        date_to: filters.date_to,
+        sort_by: filters.sort_by,
+        sort_dir: filters.sort_dir,
+        ...overrides,
+      };
+      if (this.mlExplorer.active === "feature") {
+        params.side = filters.side;
+        params.result = filters.result;
+        params.has_ml_score = filters.has_ml_score;
+      }
+      if (["market", "exchange_label"].includes(this.mlExplorer.active)) {
+        params.label_status = filters.label_status;
+      }
+      return params;
+    },
+    loadMlExplorer(overrides = {}) {
+      this.mlExplorer.loading = true;
+      this.mlExplorer.error = "";
+      const dataset = this.mlExplorer.active;
+      const params = this.mlExplorerParams(overrides);
+      this.$store.dispatch("orderBookRecovery/LOAD_ML_DATASET", {dataset, params}).then(res => {
+        if (!isResponseSuccess(res)) {
+          this.mlExplorer.error = getResponseMessage(res);
+          return;
+        }
+        this.mlExplorer.datasets[dataset] = res.data.obj;
+      }).catch(error => {
+        this.mlExplorer.error = error?.message || "Failed to load ML dataset";
+      }).finally(() => {
+        this.mlExplorer.loading = false;
+      });
+    },
+    setMlExplorerTab(tab) {
+      this.mlExplorer.active = tab;
+      this.loadMlExplorer({page: 1});
+    },
+    applyMlExplorerFilters() {
+      this.loadMlExplorer({page: 1});
+    },
+    resetMlExplorerFilters() {
+      this.mlExplorer.filters = {
+        symbol: "",
+        exchange: "",
+        date_from: "",
+        date_to: "",
+        side: "",
+        result: "",
+        label_status: "",
+        has_ml_score: "",
+        sort_by: "timestamp",
+        sort_dir: "desc",
+      };
+      this.loadMlExplorer({page: 1});
+    },
+    changeMlExplorerPage(delta) {
+      const data = this.activeMlExplorerData;
+      const next = Math.min(Math.max(1, Number(data.page || 1) + delta), Math.max(1, Number(data.total_pages || 1)));
+      this.loadMlExplorer({page: next});
+    },
+    changeMlExplorerPageSize(event) {
+      this.loadMlExplorer({page: 1, page_size: Number(event.target.value)});
+    },
+    openMlExplorerDetail(row) {
+      const dataset = this.mlExplorer.active;
+      this.$store.dispatch("orderBookRecovery/LOAD_ML_DATASET_DETAIL", {dataset, id: row.id}).then(res => {
+        if (isResponseSuccess(res)) {
+          this.mlExplorerDetail = {dataset, item: res.data.obj};
+          return;
+        }
+        this.emitter.emit("toster", {success: false, msg: getResponseMessage(res)});
+      });
+    },
+    closeMlExplorerDetail() {
+      this.mlExplorerDetail = null;
+    },
+    copyMlExplorerJson() {
+      navigator.clipboard?.writeText(JSON.stringify(this.mlExplorerDetail?.item || {}, null, 2));
+      this.emitter.emit("toster", {success: true, msg: "JSON copied"});
+    },
+    exportMlExplorer(format = "csv") {
+      const dataset = this.mlExplorer.active;
+      const params = this.mlExplorerParams({format, page: undefined, page_size: undefined});
+      this.$store.dispatch("orderBookRecovery/EXPORT_ML_DATASET_EXPLORER", {dataset, params}).then(async response => {
+        if (!response?.ok) {
+          this.emitter.emit("toster", {success: false, msg: "ML dataset export failed"});
+          return;
+        }
+        const blob = await response.blob();
+        const now = new Date();
+        const pad = value => String(value).padStart(2, "0");
+        const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}-${pad(now.getMinutes())}`;
+        const extension = format === "json" ? "json" : "csv";
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `orderbook-recovery-ml-${dataset}-${stamp}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        link.remove();
+      });
+    },
+    mlExplorerCell(row, column) {
+      const value = row?.[column];
+      if (column.includes("timestamp") || column === "created_at") return this.dt(value);
+      if (typeof value === "number") return Number.isInteger(value) ? value : this.fmt(value, Math.abs(value) < 1 ? 6 : 4);
+      if (value === null || value === undefined || value === "") return "-";
+      return value;
+    },
+    mlExplorerBadgeTone(value) {
+      if (["labeled", "win", "long", "shadow"].includes(value)) return "positive";
+      if (["pending", "created"].includes(value)) return "warning";
+      if (["loss", "rejected", "failed"].includes(value)) return "negative";
+      return "neutral";
     },
     clearDiagnostics() {
       this.$store.dispatch("orderBookRecovery/CLEAR_DIAGNOSTICS").then(res => {
@@ -797,6 +965,105 @@ export default {
 
     <section class="recovery-section">
       <div class="section-title">
+        <h3>ML Dataset Explorer</h3>
+        <button @click="loadMlExplorer()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      </div>
+      <div class="ml-tabs">
+        <button
+            v-for="tab in mlExplorerTabs"
+            :key="tab.key"
+            :class="{active: mlExplorer.active === tab.key}"
+            @click="setMlExplorerTab(tab.key)"
+        >{{ tab.label }}</button>
+      </div>
+      <div class="ml-filter-grid">
+        <label>Symbol<input v-model="mlExplorer.filters.symbol" placeholder="TON/USDT"/></label>
+        <label>Exchange<input v-model="mlExplorer.filters.exchange" placeholder="Mexc"/></label>
+        <label>Date from<input v-model="mlExplorer.filters.date_from" type="datetime-local"/></label>
+        <label>Date to<input v-model="mlExplorer.filters.date_to" type="datetime-local"/></label>
+        <label v-if="mlExplorer.active === 'feature'">Side
+          <select v-model="mlExplorer.filters.side">
+            <option value="">Any</option>
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label v-if="mlExplorer.active === 'feature'">Result
+          <select v-model="mlExplorer.filters.result">
+            <option value="">Any</option>
+            <option value="win">Win</option>
+            <option value="loss">Loss</option>
+          </select>
+        </label>
+        <label v-if="mlExplorer.active === 'feature'">ML score
+          <select v-model="mlExplorer.filters.has_ml_score">
+            <option value="">Any</option>
+            <option value="true">Has score</option>
+            <option value="false">No score</option>
+          </select>
+        </label>
+        <label v-if="['market', 'exchange_label'].includes(mlExplorer.active)">Label status
+          <select v-model="mlExplorer.filters.label_status">
+            <option value="">Any</option>
+            <option value="pending">Pending</option>
+            <option value="labeled">Labeled</option>
+          </select>
+        </label>
+        <label>Sort by
+          <select v-model="mlExplorer.filters.sort_by">
+            <option value="timestamp">Timestamp</option>
+            <option value="id">ID</option>
+            <option value="symbol">Symbol</option>
+            <option value="exchange">Exchange</option>
+            <option value="label_status" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">Label status</option>
+            <option value="future_return_10s" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">10s return</option>
+            <option value="ml_score" v-if="mlExplorer.active === 'feature'">ML score</option>
+            <option value="mid_price" v-if="mlExplorer.active === 'price_history'">Mid price</option>
+          </select>
+        </label>
+        <label>Sort
+          <select v-model="mlExplorer.filters.sort_dir">
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+          </select>
+        </label>
+      </div>
+      <div class="action-row">
+        <button @click="applyMlExplorerFilters"><i class="fa-solid fa-filter"></i> Apply filters</button>
+        <button @click="resetMlExplorerFilters"><i class="fa-solid fa-eraser"></i> Reset</button>
+        <button @click="exportMlExplorer('csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+        <button @click="exportMlExplorer('json')"><i class="fa-solid fa-file-code"></i> Export JSON</button>
+        <label class="inline-select">Page size
+          <select :value="activeMlExplorerData.page_size" @change="changeMlExplorerPageSize">
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+            <option :value="250">250</option>
+            <option :value="500">500</option>
+          </select>
+        </label>
+      </div>
+      <div class="debug-warning" v-if="mlExplorer.error">{{ mlExplorer.error }}</div>
+      <div class="empty-row" v-if="mlExplorer.loading">Loading ML dataset...</div>
+      <div class="recovery-table recovery-table--ml" v-else>
+        <div class="recovery-row recovery-row--head recovery-row--ml" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}">
+          <span v-for="column in activeMlExplorerColumns" :key="column">{{ column.replaceAll('_', ' ') }}</span>
+        </div>
+        <button class="recovery-row recovery-row--ml recovery-row--clickable" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}" v-for="row in activeMlExplorerData.items" :key="`${mlExplorer.active}-${row.id}`" @click="openMlExplorerDetail(row)">
+          <span v-for="column in activeMlExplorerColumns" :key="column" :class="{'status-pill': ['label_status', 'result', 'final_side', 'proposed_side'].includes(column), [mlExplorerBadgeTone(row[column])]: ['label_status', 'result', 'final_side', 'proposed_side'].includes(column)}">{{ mlExplorerCell(row, column) }}</span>
+        </button>
+        <div class="empty-row" v-if="!activeMlExplorerData.items.length">No ML dataset rows found</div>
+      </div>
+      <div class="pagination-row">
+        <button :disabled="activeMlExplorerData.page <= 1" @click="changeMlExplorerPage(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <span>Page {{ activeMlExplorerData.page }} / {{ activeMlExplorerData.total_pages || 1 }} · {{ activeMlExplorerData.total }} rows</span>
+        <button :disabled="activeMlExplorerData.page >= activeMlExplorerData.total_pages" @click="changeMlExplorerPage(1)"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+    </section>
+
+    <section class="recovery-section">
+      <div class="section-title">
         <h3>Signal Diagnostics</h3>
         <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i> Clear diagnostics</button>
       </div>
@@ -954,6 +1221,71 @@ export default {
         </div>
       </div>
     </section>
+
+    <div class="details-backdrop" v-if="mlExplorerDetail" @click.self="closeMlExplorerDetail">
+      <div class="details-modal">
+        <div class="details-header">
+          <div>
+            <h3>ML Dataset Details</h3>
+            <p>{{ mlExplorerDetail.dataset.replaceAll('_', ' ') }} #{{ mlExplorerDetail.item?.id }}</p>
+          </div>
+          <div class="action-row">
+            <button @click="copyMlExplorerJson"><i class="fa-solid fa-copy"></i> Copy JSON</button>
+            <button @click="closeMlExplorerDetail"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <div class="details-section">
+          <h4>Main fields</h4>
+          <div class="metric-grid">
+            <div><span>ID</span><strong>{{ mlExplorerDetail.item?.id }}</strong></div>
+            <div><span>Exchange</span><strong>{{ mlExplorerDetail.item?.exchange || '-' }}</strong></div>
+            <div><span>Symbol</span><strong>{{ mlExplorerDetail.item?.symbol || '-' }}</strong></div>
+            <div><span>Timestamp</span><strong>{{ dt(mlExplorerDetail.item?.timestamp || mlExplorerDetail.item?.created_at) }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.label_status"><span>Label status</span><strong>{{ mlExplorerDetail.item.label_status }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.result"><span>Result</span><strong>{{ mlExplorerDetail.item.result }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.ml_score !== undefined"><span>ML score</span><strong>{{ mlExplorerDetail.item.ml_score ?? '-' }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.reference_price !== undefined"><span>Reference price</span><strong>{{ fmt(mlExplorerDetail.item.reference_price, 6) }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.mid_price !== undefined"><span>Mid price</span><strong>{{ fmt(mlExplorerDetail.item.mid_price, 6) }}</strong></div>
+          </div>
+        </div>
+        <div class="details-section" v-if="mlExplorerDetail.dataset === 'market' || mlExplorerDetail.dataset === 'exchange_label'">
+          <h4>Future Returns & MFE/MAE</h4>
+          <div class="recovery-table">
+            <div class="recovery-row recovery-row--head recovery-row--details"><span>Horizon</span><span>Future</span><span>Return</span><span>Max</span><span>Min</span><span>MFE long</span><span>MAE long</span><span>MFE short</span><span>MAE short</span></div>
+            <div class="recovery-row recovery-row--details" v-for="horizon in [10, 30, 60]" :key="horizon">
+              <span>{{ horizon }}s</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`future_price_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`future_return_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`max_price_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`min_price_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`mfe_long_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`mae_long_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`mfe_short_${horizon}s`], 6) }}</span>
+              <span>{{ fmt(mlExplorerDetail.item?.[`mae_short_${horizon}s`], 6) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="details-section" v-if="mlExplorerDetail.item?.exchange_labels?.length">
+          <h4>Exchange Labels</h4>
+          <div class="recovery-table">
+            <div class="recovery-row recovery-row--head recovery-row--details"><span>Exchange</span><span>Symbol</span><span>Status</span><span>Ref</span><span>10s return</span><span>30s return</span><span>60s return</span></div>
+            <div class="recovery-row recovery-row--details" v-for="label in mlExplorerDetail.item.exchange_labels" :key="label.id">
+              <span>{{ label.exchange }}</span>
+              <span>{{ label.symbol }}</span>
+              <span>{{ label.label_status }}</span>
+              <span>{{ fmt(label.reference_price, 6) }}</span>
+              <span>{{ fmt(label.future_return_10s, 6) }}</span>
+              <span>{{ fmt(label.future_return_30s, 6) }}</span>
+              <span>{{ fmt(label.future_return_60s, 6) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="details-section">
+          <h4>Raw JSON</h4>
+          <pre class="raw-block">{{ JSON.stringify(mlExplorerDetail.item, null, 2) }}</pre>
+        </div>
+      </div>
+    </div>
 
     <div class="details-backdrop" v-if="decisionDetails" @click.self="closeDetails">
       <div class="details-modal">
@@ -1274,6 +1606,43 @@ button{
   gap: 10px;
   min-width: 0;
 }
+.ml-tabs{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.ml-tabs button{
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  color: #d7deef;
+}
+.ml-tabs button.active{
+  background: rgba(70,205,207,.18);
+  border-color: rgba(70,205,207,.55);
+  color: #ecfeff;
+}
+.ml-filter-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.inline-select{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #aeb8cc;
+  font-size: 12px;
+}
+.pagination-row{
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  color: #aeb8cc;
+}
 button{
   cursor: pointer;
   background: #46cdcf;
@@ -1327,6 +1696,9 @@ button{
   scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
 }
+.recovery-table--ml{
+  overflow-x: auto;
+}
 .recovery-row{
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1338,6 +1710,20 @@ button{
   margin-bottom: 8px;
   width: 100%;
   box-sizing: border-box;
+}
+.recovery-row--ml{
+  min-width: 980px;
+}
+.recovery-row--clickable{
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.recovery-row--clickable:hover{
+  background: rgba(70,205,207,.08);
 }
 .recovery-row > span{
   min-width: 0;

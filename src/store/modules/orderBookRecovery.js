@@ -127,6 +127,15 @@ export default {
         async EXPORT_ML_EXCHANGE_LABELS(context, payload = {}) {
             return orderBookRecoveryApi.exportMlExchangeLabels(payload.format || "csv");
         },
+        async LOAD_ML_DATASET(context, payload = {}) {
+            return orderBookRecoveryApi.getMlDataset(payload.dataset, payload.params || {});
+        },
+        async LOAD_ML_DATASET_DETAIL(context, payload = {}) {
+            return orderBookRecoveryApi.getMlDatasetDetail(payload.dataset, payload.id);
+        },
+        async EXPORT_ML_DATASET_EXPLORER(context, payload = {}) {
+            return orderBookRecoveryApi.exportMlDatasetExplorer(payload.dataset, payload.params || {});
+        },
     },
     mutations: {
         SET_CONFIG(state, payload) {

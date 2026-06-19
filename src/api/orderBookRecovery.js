@@ -1,6 +1,21 @@
 import { apiClient } from "@/api/client.js";
 import { runtimeConfig } from "@/config/runtime.js";
 
+const mlDatasetPaths = {
+    feature: "feature-snapshots",
+    market: "market-snapshots",
+    price_history: "price-history",
+    exchange_label: "exchange-labels",
+};
+
+const buildQuery = (params = {}) => {
+    const search = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") search.set(key, value);
+    });
+    return search.toString();
+};
+
 export default {
     getConfig() {
         return apiClient.get("/orderbook-recovery/config");
@@ -100,6 +115,21 @@ export default {
     exportMlExchangeLabels(format = "csv") {
         const params = new URLSearchParams({format});
         return fetch(`${runtimeConfig.apiBaseUrl}/orderbook-recovery/ml/exchange-labels/export?${params.toString()}`, {
+            headers: {
+                Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+            },
+        });
+    },
+    getMlDataset(dataset, params = {}) {
+        const query = buildQuery(params);
+        return apiClient.get(`/orderbook-recovery/ml/${mlDatasetPaths[dataset]}${query ? `?${query}` : ""}`);
+    },
+    getMlDatasetDetail(dataset, id) {
+        return apiClient.get(`/orderbook-recovery/ml/${mlDatasetPaths[dataset]}/${id}`);
+    },
+    exportMlDatasetExplorer(dataset, params = {}) {
+        const query = buildQuery(params);
+        return fetch(`${runtimeConfig.apiBaseUrl}/orderbook-recovery/ml/${mlDatasetPaths[dataset]}/export?${query}`, {
             headers: {
                 Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
             },
