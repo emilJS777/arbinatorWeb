@@ -92,6 +92,7 @@ export default {
       mlExplorerDetailError: "",
       mlExplorerDetailRequest: null,
       manualMarginValue: null,
+      actionLoading: {},
       mlExplorer: {
         active: "feature",
         loading: false,
@@ -121,10 +122,10 @@ export default {
     this.load();
     this.loadMlExplorer();
     this.startPolling();
-    this.emitter.on("orderbook_recovery.position_opened", () => this.load());
-    this.emitter.on("orderbook_recovery.position_closed", () => this.load());
-    this.emitter.on("orderbook_recovery.started", () => this.load());
-    this.emitter.on("orderbook_recovery.stopped", () => this.load());
+    this.emitter.on("orderbook_recovery.position_opened", () => this.refreshTradingData());
+    this.emitter.on("orderbook_recovery.position_closed", () => this.refreshTradingData());
+    this.emitter.on("orderbook_recovery.started", () => this.refreshStatusData());
+    this.emitter.on("orderbook_recovery.stopped", () => this.refreshStatusData());
   },
   beforeUnmount() {
     if (this.poller) clearInterval(this.poller);
@@ -148,7 +149,31 @@ export default {
   },
   methods: {
     load() {
-      this.$store.dispatch("orderBookRecovery/LOAD");
+      return this.$store.dispatch("orderBookRecovery/LOAD");
+    },
+    refreshStatusData() {
+      return Promise.allSettled([
+        this.$store.dispatch("orderBookRecovery/LOAD_STATUS"),
+        this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS"),
+      ]);
+    },
+    refreshTradingData() {
+      return Promise.allSettled([
+        this.$store.dispatch("orderBookRecovery/LOAD_STATUS"),
+        this.$store.dispatch("orderBookRecovery/LOAD_TRADES"),
+      ]);
+    },
+    setActionLoading(action, value) {
+      this.actionLoading = {...this.actionLoading, [action]: value};
+    },
+    async runAction(action, handler) {
+      if (this.actionLoading[action]) return null;
+      this.setActionLoading(action, true);
+      try {
+        return await handler();
+      } finally {
+        this.setActionLoading(action, false);
+      }
     },
     startPolling() {
       this.pollers.forEach(poller => clearInterval(poller));
@@ -158,10 +183,6 @@ export default {
         setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS"), 25000),
         setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS"), 45000),
       ];
-      this.$store.dispatch("orderBookRecovery/LOAD_STATUS");
-      this.$store.dispatch("orderBookRecovery/LOAD_TRADES");
-      this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS");
-      this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS");
     },
     syncFormSelection() {
       if (!this.config || !this.options) return;
@@ -207,13 +228,14 @@ export default {
         this.emitter.emit("toster", {success: false, msg: "Select trading pair"});
         return;
       }
-      this.emitter.emit("loader", true);
-      this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form)).then(res => {
+      this.runAction("saveConfig", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form));
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Config saved" : getResponseMessage(res),
         });
-      }).finally(() => this.emitter.emit("loader", false));
+        if (isResponseSuccess(res)) await this.refreshStatusData();
+      });
     },
     async start() {
       if (this.form) {
@@ -229,44 +251,40 @@ export default {
       if ((this.form?.execution_mode || this.config?.execution_mode) === "live") {
         if (!window.confirm("You are enabling LIVE trading. Real orders may be placed on the exchange.")) return;
       }
-      this.emitter.emit("loader", true);
-      if (this.form) {
-        const saveRes = await this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form));
-        if (!isResponseSuccess(saveRes)) {
-          this.emitter.emit("loader", false);
-          this.emitter.emit("toster", {success: false, msg: getResponseMessage(saveRes)});
-          return;
+      await this.runAction("start", async () => {
+        if (this.form) {
+          const saveRes = await this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form));
+          if (!isResponseSuccess(saveRes)) {
+            this.emitter.emit("toster", {success: false, msg: getResponseMessage(saveRes)});
+            return;
+          }
         }
-      }
-      this.$store.dispatch("orderBookRecovery/START").then(res => {
+        const res = await this.$store.dispatch("orderBookRecovery/START");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Strategy started" : getResponseMessage(res),
         });
-        this.$store.dispatch("orderBookRecovery/LOAD");
-      }).finally(() => this.emitter.emit("loader", false));
+      });
     },
     stop() {
-      this.emitter.emit("loader", true);
-      this.$store.dispatch("orderBookRecovery/STOP").then(res => {
+      this.runAction("stop", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/STOP");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Strategy stopped" : getResponseMessage(res),
         });
-        this.$store.dispatch("orderBookRecovery/LOAD");
-      }).finally(() => this.emitter.emit("loader", false));
+      });
     },
     closePosition() {
       if (!this.openPosition) return;
       if (!window.confirm("Close current paper position manually?")) return;
-      this.emitter.emit("loader", true);
-      this.$store.dispatch("orderBookRecovery/CLOSE_MANUAL", this.openPosition.id).then(res => {
+      this.runAction("closePosition", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/CLOSE_MANUAL", this.openPosition.id);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Position closed manually" : getResponseMessage(res),
         });
-        this.$store.dispatch("orderBookRecovery/LOAD");
-      }).finally(() => this.emitter.emit("loader", false));
+      });
     },
     resetRecovery() {
       if (this.openPosition) {
@@ -274,7 +292,8 @@ export default {
         return;
       }
       if (!window.confirm("Reset recovery to base margin?")) return;
-      this.$store.dispatch("orderBookRecovery/RESET_RECOVERY").then(res => {
+      this.runAction("resetRecovery", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/RESET_RECOVERY");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Recovery reset" : getResponseMessage(res),
@@ -291,7 +310,8 @@ export default {
         this.emitter.emit("toster", {success: false, msg: "Enter valid current margin"});
         return;
       }
-      this.$store.dispatch("orderBookRecovery/SET_CURRENT_MARGIN", value).then(res => {
+      this.runAction("setCurrentMargin", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/SET_CURRENT_MARGIN", value);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Current margin updated" : getResponseMessage(res),
@@ -427,7 +447,8 @@ export default {
     },
     archiveTrade(trade) {
       if (!trade || !trade.closed_at) return;
-      this.$store.dispatch("orderBookRecovery/ARCHIVE_TRADE", trade.id).then(res => {
+      this.runAction(`archiveTrade:${trade.id}`, async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/ARCHIVE_TRADE", trade.id);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Trade archived" : getResponseMessage(res),
@@ -437,7 +458,8 @@ export default {
     deleteArchivedTrade(trade) {
       if (!trade?.is_archived) return;
       if (!window.confirm("Delete archived trade permanently?")) return;
-      this.$store.dispatch("orderBookRecovery/DELETE_ARCHIVED_TRADE", trade.id).then(res => {
+      this.runAction(`deleteArchivedTrade:${trade.id}`, async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/DELETE_ARCHIVED_TRADE", trade.id);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Archived trade deleted" : getResponseMessage(res),
@@ -446,7 +468,8 @@ export default {
     },
     deleteAllArchivedTrades() {
       if (!window.confirm("Delete all archived trades permanently?")) return;
-      this.$store.dispatch("orderBookRecovery/DELETE_ALL_ARCHIVED_TRADES").then(res => {
+      this.runAction("deleteAllArchivedTrades", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/DELETE_ALL_ARCHIVED_TRADES");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Archived trades deleted" : getResponseMessage(res),
@@ -454,7 +477,8 @@ export default {
       });
     },
     archiveAllClosed() {
-      this.$store.dispatch("orderBookRecovery/ARCHIVE_ALL_CLOSED").then(res => {
+      this.runAction("archiveAllClosed", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/ARCHIVE_ALL_CLOSED");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Closed trades archived" : getResponseMessage(res),
@@ -462,7 +486,8 @@ export default {
       });
     },
     unarchiveAll() {
-      this.$store.dispatch("orderBookRecovery/UNARCHIVE_ALL").then(res => {
+      this.runAction("unarchiveAll", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/UNARCHIVE_ALL");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Trades restored" : getResponseMessage(res),
@@ -637,7 +662,8 @@ export default {
         this.emitter.emit("toster", {success: false, msg: "No non-archived closed trades to export"});
         return;
       }
-      this.$store.dispatch("orderBookRecovery/EXPORT_TRADES", {format, includeArchived: false}).then(async response => {
+      this.runAction(`exportTrades:${format}`, async () => {
+        const response = await this.$store.dispatch("orderBookRecovery/EXPORT_TRADES", {format, includeArchived: false});
         if (!response?.ok) {
           this.emitter.emit("toster", {success: false, msg: "Export failed"});
           return;
@@ -869,9 +895,9 @@ export default {
         <label class="check-row"><input v-model="form.enabled" type="checkbox"/> Enabled</label>
       </div>
       <div class="action-row">
-        <button @click="saveConfig"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-        <button @click="start"><i class="fa-solid fa-play"></i> Start Paper</button>
-        <button class="button-danger" @click="stop"><i class="fa-solid fa-stop"></i> Stop</button>
+        <button :disabled="actionLoading.saveConfig" @click="saveConfig"><i class="fa-solid fa-floppy-disk"></i> {{ actionLoading.saveConfig ? 'Saving...' : 'Save' }}</button>
+        <button :disabled="actionLoading.start" @click="start"><i class="fa-solid fa-play"></i> {{ actionLoading.start ? 'Starting...' : 'Start Paper' }}</button>
+        <button class="button-danger" :disabled="actionLoading.stop" @click="stop"><i class="fa-solid fa-stop"></i> {{ actionLoading.stop ? 'Stopping...' : 'Stop' }}</button>
       </div>
     </section>
 
@@ -898,9 +924,9 @@ export default {
         <div><span>Manual margin value</span><strong>{{ fmt(recoveryState.last_manual_margin_override_value, 2) }} USDT</strong></div>
       </div>
       <div class="action-row">
-        <button :disabled="Boolean(openPosition)" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> Reset recovery to base margin</button>
+        <button :disabled="Boolean(openPosition) || actionLoading.resetRecovery" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> {{ actionLoading.resetRecovery ? 'Resetting...' : 'Reset recovery to base margin' }}</button>
         <input v-model.number="manualMarginValue" :disabled="Boolean(openPosition)" min="0" step="0.1" type="number" placeholder="Current margin USDT"/>
-        <button :disabled="Boolean(openPosition)" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> Set current margin</button>
+        <button :disabled="Boolean(openPosition) || actionLoading.setCurrentMargin" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> {{ actionLoading.setCurrentMargin ? 'Saving...' : 'Set current margin' }}</button>
       </div>
     </section>
 
@@ -1221,7 +1247,7 @@ export default {
         <div class="empty-row" v-else>No open position</div>
       </div>
       <div class="action-row" v-if="openPosition">
-        <button class="button-danger" @click="closePosition"><i class="fa-solid fa-xmark"></i> Close Position</button>
+        <button class="button-danger" :disabled="actionLoading.closePosition" @click="closePosition"><i class="fa-solid fa-xmark"></i> {{ actionLoading.closePosition ? 'Closing...' : 'Close Position' }}</button>
       </div>
     </section>
 
@@ -1229,11 +1255,11 @@ export default {
       <h3>Last Trades</h3>
       <div class="action-row">
         <label class="check-row"><input :checked="showArchived" type="checkbox" @change="setShowArchived"/> Show archived trades</label>
-        <button @click="exportTrades('csv')"><i class="fa-solid fa-file-csv"></i> Export non-archived trades</button>
-        <button @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> Export JSON</button>
-        <button @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> Archive all closed trades</button>
-        <button @click="unarchiveAll"><i class="fa-solid fa-rotate-left"></i> Unarchive all</button>
-        <button class="button-danger" @click="deleteAllArchivedTrades"><i class="fa-solid fa-trash"></i> Delete all archived trades</button>
+        <button :disabled="actionLoading['exportTrades:csv']" @click="exportTrades('csv')"><i class="fa-solid fa-file-csv"></i> {{ actionLoading['exportTrades:csv'] ? 'Exporting...' : 'Export non-archived trades' }}</button>
+        <button :disabled="actionLoading['exportTrades:json']" @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> {{ actionLoading['exportTrades:json'] ? 'Exporting...' : 'Export JSON' }}</button>
+        <button :disabled="actionLoading.archiveAllClosed" @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> {{ actionLoading.archiveAllClosed ? 'Archiving...' : 'Archive all closed trades' }}</button>
+        <button :disabled="actionLoading.unarchiveAll" @click="unarchiveAll"><i class="fa-solid fa-rotate-left"></i> {{ actionLoading.unarchiveAll ? 'Restoring...' : 'Unarchive all' }}</button>
+        <button class="button-danger" :disabled="actionLoading.deleteAllArchivedTrades" @click="deleteAllArchivedTrades"><i class="fa-solid fa-trash"></i> {{ actionLoading.deleteAllArchivedTrades ? 'Deleting...' : 'Delete all archived trades' }}</button>
       </div>
       <div class="metric-grid">
         <div><span>Archived trades</span><strong>{{ metrics?.archived_trades_count ?? 0 }}</strong></div>
@@ -1261,8 +1287,8 @@ export default {
           <span class="trade-actions" data-label="Action">
             <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ formatWarningSummary(trade) }}</span>
             <button @click="viewDetails(trade)">View Details</button>
-            <button v-if="trade.closed_at && !trade.is_archived" @click="archiveTrade(trade)">Archive</button>
-            <button v-if="trade.is_archived" class="button-danger" @click="deleteArchivedTrade(trade)">Delete</button>
+            <button v-if="trade.closed_at && !trade.is_archived" :disabled="actionLoading[`archiveTrade:${trade.id}`]" @click="archiveTrade(trade)">Archive</button>
+            <button v-if="trade.is_archived" class="button-danger" :disabled="actionLoading[`deleteArchivedTrade:${trade.id}`]" @click="deleteArchivedTrade(trade)">Delete</button>
           </span>
         </div>
       </div>

@@ -6,7 +6,10 @@ export const createPollingRuntime = () => ({
   groups: {},
 });
 
-export const isUnavailableResponse = response => Number(response?.status || response?.rawError?.response?.status || 0) === 503;
+export const isUnavailableResponse = response => {
+  const status = Number(response?.status || response?.rawError?.response?.status || 0);
+  return status === 0 || status === 503;
+};
 
 export const backoffDelayForFailures = failures =>
   Math.min(POLL_BACKOFF_MAX_MS, POLL_BACKOFF_BASE_MS * (2 ** Math.max(0, failures - 1)));

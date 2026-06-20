@@ -136,12 +136,18 @@ export default {
         },
         async START({ dispatch }) {
             const res = await orderBookRecoveryApi.startPaper();
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_DIAGNOSTICS"),
+            ]);
             return res;
         },
         async STOP({ dispatch }) {
             const res = await orderBookRecoveryApi.stop();
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_DIAGNOSTICS"),
+            ]);
             return res;
         },
         async CLEAR_DIAGNOSTICS({ dispatch }) {
@@ -151,46 +157,64 @@ export default {
         },
         async RESET_RECOVERY({ dispatch }) {
             const res = await orderBookRecoveryApi.resetRecovery();
-            await dispatch("LOAD");
+            await dispatch("LOAD_STATUS");
             return res;
         },
         async SET_CURRENT_MARGIN({ dispatch }, currentMargin) {
             const res = await orderBookRecoveryApi.setCurrentMargin(currentMargin);
-            await dispatch("LOAD");
+            await dispatch("LOAD_STATUS");
             return res;
         },
         async CLOSE_MANUAL({ dispatch }, positionId) {
             const res = await orderBookRecoveryApi.closeManual(positionId);
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async SET_SHOW_ARCHIVED({ commit, dispatch }, value) {
             commit("SET_SHOW_ARCHIVED", value);
-            await dispatch("LOAD");
+            await dispatch("LOAD_TRADES");
         },
         async ARCHIVE_TRADE({ dispatch }, tradeId) {
             const res = await orderBookRecoveryApi.archiveTrade(tradeId);
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async DELETE_ARCHIVED_TRADE({ dispatch }, tradeId) {
             const res = await orderBookRecoveryApi.deleteArchivedTrade(tradeId);
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async DELETE_ALL_ARCHIVED_TRADES({ dispatch }) {
             const res = await orderBookRecoveryApi.deleteAllArchivedTrades();
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async ARCHIVE_ALL_CLOSED({ dispatch }) {
             const res = await orderBookRecoveryApi.archiveAllClosed();
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async UNARCHIVE_ALL({ dispatch }) {
             const res = await orderBookRecoveryApi.unarchiveAll();
-            await dispatch("LOAD");
+            await Promise.allSettled([
+                dispatch("LOAD_STATUS"),
+                dispatch("LOAD_TRADES"),
+            ]);
             return res;
         },
         async LOAD_DECISION_DETAILS(context, tradeId) {

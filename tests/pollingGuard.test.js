@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {backoffDelayForFailures, createPollingRuntime, runPollingGroup} from '../src/utils/pollingGuard.js';
+import {backoffDelayForFailures, createPollingRuntime, isUnavailableResponse, runPollingGroup} from '../src/utils/pollingGuard.js';
 
 const ok = value => ({data: {success: true, obj: value}, status: 200});
 const unavailable = () => ({data: {success: false, obj: {msg: 'unavailable'}}, status: 503});
@@ -63,4 +63,10 @@ test('503 response enables backoff and skips next tick', async () => {
   assert.equal(second.skipped, true);
   assert.equal(unavailableState, true);
   assert.equal(runtime.groups.status.nextAllowedAt, 1000 + backoffDelayForFailures(1));
+});
+
+test('network failures are treated as temporarily unavailable', () => {
+  assert.equal(isUnavailableResponse({status: 0}), true);
+  assert.equal(isUnavailableResponse({rawError: {response: {status: 503}}}), true);
+  assert.equal(isUnavailableResponse({status: 500}), false);
 });
