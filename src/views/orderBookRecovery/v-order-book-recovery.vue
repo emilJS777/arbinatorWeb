@@ -657,6 +657,19 @@ export default {
         });
       });
     },
+    clearMlDataset() {
+      if (!window.confirm("Delete all collected ML training dataset rows from the database? This cannot be undone.")) return;
+      this.runAction("clearMlDataset", async () => {
+        const res = await this.$store.dispatch("orderBookRecovery/CLEAR_ML_DATASET");
+        this.emitter.emit("toster", {
+          success: isResponseSuccess(res),
+          msg: isResponseSuccess(res) ? "ML dataset cleared" : getResponseMessage(res),
+        });
+        if (isResponseSuccess(res)) {
+          await this.loadMlExplorer();
+        }
+      });
+    },
     exportTrades(format = "csv") {
       if (!this.exportableTradesCount) {
         this.emitter.emit("toster", {success: false, msg: "No non-archived closed trades to export"});
@@ -1106,6 +1119,7 @@ export default {
         <button @click="resetMlExplorerFilters"><i class="fa-solid fa-eraser"></i> Reset</button>
         <button @click="exportMlExplorer('csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
         <button @click="exportMlExplorer('json')"><i class="fa-solid fa-file-code"></i> Export JSON</button>
+        <button class="button-danger" :disabled="actionLoading.clearMlDataset" @click="clearMlDataset"><i class="fa-solid fa-trash"></i> {{ actionLoading.clearMlDataset ? 'Clearing...' : 'Clear ML dataset' }}</button>
         <label class="inline-select">Page size
           <select :value="activeMlExplorerData.page_size" @change="changeMlExplorerPageSize">
             <option :value="25">25</option>

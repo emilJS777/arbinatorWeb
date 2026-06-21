@@ -241,6 +241,14 @@ export default {
         async EXPORT_ML_DATASET_EXPLORER(context, payload = {}) {
             return orderBookRecoveryApi.exportMlDatasetExplorer(payload.dataset, payload.params || {});
         },
+        async CLEAR_ML_DATASET({ dispatch }) {
+            const res = await orderBookRecoveryApi.clearMlDataset();
+            await Promise.allSettled([
+                dispatch("LOAD_ML_STATS"),
+                dispatch("LOAD_DIAGNOSTICS"),
+            ]);
+            return res;
+        },
     },
     mutations: {
         SET_CONFIG(state, payload) {
