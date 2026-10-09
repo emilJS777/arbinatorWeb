@@ -24,6 +24,13 @@ export const pairOptionsForExchange = (exchanges = [], exchangeId) => {
 };
 
 export const configDefaults = {
+    emergency_entry_block: true,
+    risk_per_trade_percent: 0.25,
+    max_position_margin_usdt: 10,
+    max_consecutive_losses: 3,
+    max_leverage: 2,
+    paper_taker_fee_percent: 0.1,
+    paper_latency_ms: 250,
     execution_mode: "paper",
     live_enabled_confirmation: false,
     live_kill_switch: true,
@@ -71,6 +78,13 @@ const normalizeMlLabelHorizons = value => {
 export const normalizeConfigForm = (form = {}) => ({
     ...configDefaults,
     ...form,
+    emergency_entry_block: form.emergency_entry_block == null ? true : Boolean(form.emergency_entry_block),
+    risk_per_trade_percent: Number(form.risk_per_trade_percent ?? 0.25),
+    max_position_margin_usdt: Number(form.max_position_margin_usdt ?? 10),
+    max_consecutive_losses: Number(form.max_consecutive_losses ?? 3),
+    max_leverage: Number(form.max_leverage ?? 2),
+    paper_taker_fee_percent: Number(form.paper_taker_fee_percent ?? 0.1),
+    paper_latency_ms: Number(form.paper_latency_ms ?? 250),
     execution_mode: ["paper", "live"].includes(form.execution_mode) ? form.execution_mode : configDefaults.execution_mode,
     live_enabled_confirmation: Boolean(form.live_enabled_confirmation),
     live_kill_switch: form.live_kill_switch === undefined ? configDefaults.live_kill_switch : Boolean(form.live_kill_switch),

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {findArbitrageOpportunities} from '../src/domain/arbitrage/findArbitrageOpportunities.js';
+import orderBooks from '../src/store/modules/orderBooks.js';
 import {isValidMlStats, normalizeArray, normalizeObjectValues} from '../src/utils/safePayload.js';
 
 test('normalizeArray returns only arrays', () => {
@@ -16,11 +16,10 @@ test('normalizeObjectValues accepts arrays and object maps', () => {
   assert.deepEqual(normalizeObjectValues({a: 1, b: 2}), [1, 2]);
 });
 
-test('findArbitrageOpportunities never throws on invalid payloads', () => {
-  assert.deepEqual(findArbitrageOpportunities(null, null), []);
-  assert.deepEqual(findArbitrageOpportunities(undefined, []), []);
-  assert.deepEqual(findArbitrageOpportunities([], []), []);
-  assert.deepEqual(findArbitrageOpportunities({Mexc: null}, []), []);
+test('shared order books safely ignore invalid payloads without arbitrage calculation', () => {
+  const state = {ORDER_BOOKS: {}};
+  for (const payload of [null, undefined, [], {data: {order_book: {}}}]) orderBooks.mutations.SET_ORDER_BOOKS(state, payload);
+  assert.deepEqual(state.ORDER_BOOKS, {});
 });
 
 test('isValidMlStats validates numeric stat fields', () => {

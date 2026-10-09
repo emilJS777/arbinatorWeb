@@ -1,158 +1,71 @@
 <script>
-import VTableStandard from "@/components/_general/v-table-standard.vue";
-import toggleMixin from "@/mixins/toggle-mixin.js";
-import VEditForm from "@/components/_general/v-edit-form.vue";
-import VInputNormal from "@/components/_general/v-input-standard.vue";
-import VCheckboxesStandard from "@/components/_general/v-checkboxes-standard.vue";
-import VConfirmModal from "@/components/_general/v-confirm-modal.vue";
-
+import {exchangePayload} from '@/utils/exchangeForm.js';
 export default {
-  components: {VConfirmModal, VCheckboxesStandard, VInputNormal, VEditForm, VTableStandard},
-  mixins: [toggleMixin],
-  data() {
-    return {
-      dataLabels: ['#', '', 'TITLE', 'ENABLED'],
-      dataKeys: ['id', 'icon_path', 'title', 'enabled'],
-      tableData: [],
-      blocks: {},
-      form: null,
-    }
-  },
-
-
-  mounted() {
-    this.getData();
-  },
+  data: () => ({rows: [], loading: false, error: '', form: null, saving: false, deleting: null}),
+  mounted() {this.load();},
   methods: {
-    setDefaultForm(){
-      this.form = {
-        title: "",
-        icon_path: "",
-        index: 1,
-        enabled: false,
-        api_key: "",
-        api_secret: "",
-        password: "",
-      }
+    async load() {
+      this.loading = true; this.error = '';
+      try {const res = await this.$store.dispatch('exchanges/GET', ''); if (!res?.data?.success) throw new Error(res?.message || 'Request failed'); this.rows = Array.isArray(res.data.obj) ? res.data.obj : [];}
+      catch (error) {this.error = error.message;}
+      finally {this.loading = false;}
     },
-    getData(){
-      this.tableData = [];
-      this.$store.dispatch("exchanges/GET", ``).then(res=>{
-        if(res.data.success)
-          this.tableData = res.data.obj;
-      })
+    edit(row = {}) {this.form = {id: row.id, title: row.title || '', icon_path: row.icon_path || '', index: row.index ?? 1, enabled: row.enabled ?? false, api_key: '', api_secret: '', password: ''};},
+    async save() {
+      if (this.saving || !this.form?.title.trim()) return;
+      this.saving = true;
+      try {
+        const payload = exchangePayload(this.form, Boolean(this.form.id));
+        const res = await this.$store.dispatch(this.form.id ? 'exchanges/PUT' : 'exchanges/POST', this.form.id ? {id: this.form.id, form: payload} : payload);
+        if (!res?.data?.success) throw new Error(res?.message || 'Request failed');
+        this.form = null; await this.load();
+      } catch (error) {this.emitter.emit('toster', {success: false, msg: error.message});}
+      finally {this.saving = false;}
     },
-    create(){
-      this.$store.dispatch("exchanges/POST", this.form).then(res=>{
-        if(res.data.success) {
-          this.setModalName(false)
-          this.emitter.emit('toster', {success: true, msg: 'Created!'})
-          this.getData()
-        }
-        else
-          this.emitter.emit('toster', {success: false, msg: res.message})
-      })
+    async remove(row) {
+      if (!window.confirm(`${this.$t('Delete Exchange')} ${row.title}?`)) return;
+      this.deleting = row.id;
+      try {const res = await this.$store.dispatch('exchanges/DELETE', row.id); if (!res?.data?.success) throw new Error(res?.message || 'Request failed'); await this.load();}
+      catch (error) {this.emitter.emit('toster', {success: false, msg: error.message});}
+      finally {this.deleting = null;}
     },
-    update(id, data=null){
-      this.$store.dispatch("exchanges/PUT", {form: data ? data : this.form, id: id}).then(res=>{
-        if(res.data.success) {
-          this.setModalName(false)
-          this.emitter.emit('toster', {success: true, msg: 'Updated!'})
-          this.getData()
-        }
-        else
-          this.emitter.emit('toster', {success: false, msg: res.message})
-      })
-    },
-    delete(id){
-      this.$store.dispatch("exchanges/DELETE", id).then(res => {
-        if(res.data.success) {
-          this.getData()
-          this.emitter.emit('toster', {success: true, msg: 'Deleted!'})
-        }
-        else
-          this.emitter.emit('toster', {success: false, msg: res.response.data})
-        this.setModalName(false)
-      })
-    },
-  }
-}
+  },
+};
 </script>
-
 <template>
-  <div class="w-max animation-from-hidden-long">
-    <div class="page-heading">
-      <p class="page-heading__eyebrow margin-0">Exchange Directory</p>
-      <h2 class="c-mode-1 margin-0">Connect and manage your execution venues.</h2>
-      <p class="page-heading__copy margin-0">Keep API credentials organized, enable only the venues you trust, and build a cleaner foundation for live arbitrage execution.</p>
+  <div class="recovery-page">
+    <div class="workspace-page-heading"><div><div class="workspace-eyebrow">CONNECTIONS</div><h1>{{ $t('Exchange Connections') }}</h1><p>{{ $t('Execution venues and market-data sources. Enabling a connection does not start the bot.') }}</p></div><div class="action-row"><button :disabled="loading" @click="load"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>{{ $t('Refresh') }}</button><button class="primary-button" @click="edit()"><i class="fa-solid fa-plus" aria-hidden="true"></i>{{ $t('Add Exchange') }}</button></div></div>
+    <div v-if="error" class="workspace-notice" role="alert">{{ error }}</div><div v-if="loading" role="status">{{ $t('Loading connections...') }}</div>
+    <div v-if="!loading && !rows.length && !error" class="workspace-notice neutral">{{ $t('No exchange connections yet') }}</div>
+    <div class="connection-list">
+      <article v-for="row in rows" :key="row.id" class="exchange-row">
+        <div class="exchange-identity"><span class="exchange-monogram" aria-hidden="true">{{ row.title?.slice(0, 2).toUpperCase() }}</span><div><h3>{{ row.title }}</h3><small>#{{ row.id }} · {{ $t(row.enabled ? 'Enabled' : 'Disabled') }}</small></div></div>
+        <div class="credential-status"><i class="fa-solid fa-key" aria-hidden="true"></i>{{ $t(row.has_api_key && row.has_secret ? 'Credentials saved' : 'Credentials incomplete') }}<small>{{ $t('Connection health is reported by the scanner, not credential presence.') }}</small></div>
+        <div class="action-row"><button @click="edit(row)"><i class="fa-solid fa-pen" aria-hidden="true"></i>{{ $t('Edit') }}</button><button class="button-danger" :disabled="deleting === row.id" @click="remove(row)"><i class="fa-solid fa-trash" aria-hidden="true"></i>{{ $t('Delete') }}</button></div>
+      </article>
     </div>
-
-    <v-table-standard
-        grid-template-columns="50px 40px minmax(220px, 1fr) 80px 140px"
-        :editable="false"
-        @delete="(data) => this.setModalName('deleteConfirm', data.id)"
-        @edit="(data) => {this.setModalName('edit', data.id); this.form = JSON.parse(JSON.stringify(data))}"
-        @update="(data) => this.update(data.id, data)"
-        @add="this.setDefaultForm();setModalName('add')"
-        enable-alert-title="Exchange activation ?"
-        disable-alert-title="Exchange deactivation ?"
-        :create-label="'Add Exchange'"
-        table-width="max-content"
-        :allowEnabled="true"
-        :buttons="[
-            {
-                    iconName: 'fa-solid fa-pen',
-                    emitName: 'edit',
-                    className: 'bg-blue c-fff f-size-10',
-                    title: 'View',
-            },
-            {
-                    iconName: 'fa-regular fa-trash-can',
-                    emitName: 'delete',
-                    className: 'c-pointer bg-err-msg padding-03 err-msg d-flex a-items-center j-content-center bg-trash',
-                    title: 'Delete',
-            },
-          ]"
-        :data="this.tableData"
-        :data-labels="this.dataLabels"
-        :data-keys="this.dataKeys"
-        :total-pages="1"
-        :total-records="'Nan'"
-    />
+    <div v-if="form" class="details-backdrop" @click.self="form = null" @keydown.esc="form = null">
+      <form class="details-modal" v-dialog-focus="() => form = null" :aria-label="$t('Exchange Form')" @submit.prevent="save">
+        <div class="details-header"><h3>{{ $t('Exchange Form') }}</h3><button type="button" @click="form = null">{{ $t('Cancel') }}</button></div>
+        <p class="workspace-notice neutral">{{ $t('Leave credentials blank to keep saved values. Never enable withdrawal permissions.') }}</p>
+        <div class="exchange-fields">
+          <label>{{ $t('Title') }}<input v-model="form.title" required autocomplete="off" /></label>
+          <label>{{ $t('Icon path') }}<input v-model="form.icon_path" /></label>
+          <label>{{ $t('Display order') }}<input v-model.number="form.index" type="number" /></label>
+          <label v-for="key in ['api_key', 'api_secret', 'password']" :key="key">{{ $t(key) }}<input v-model="form[key]" type="password" autocomplete="new-password" /></label>
+          <label class="check-row"><input v-model="form.enabled" type="checkbox" />{{ $t('Enabled') }}</label>
+        </div>
+        <div class="action-row"><button class="primary-button" type="submit" :disabled="saving || !form.title.trim()">{{ $t(saving ? 'Saving...' : 'Save changes') }}</button></div>
+      </form>
+    </div>
   </div>
-
-  <v-edit-form title="Exchange Form" @save="this.modalName === 'add' ? this.create() : this.update(this.id)" @cancel="this.setModalName(false)" v-if="modalName === 'add' || modalName === 'edit'">
-    <template #inputs>
-      <v-input-normal label="Title *" @value="val => this.form.title = val" :default_value="this.form.title"/>
-      <v-input-normal label="Icon path" @value="val => this.form.icon_path = val" :default_value="this.form.icon_path"/>
-      <v-input-normal label="Index" type="number" @value="val => this.form.index = val" :default_value="this.form.index"/>
-      <v-input-normal label="Api key"  @value="val => this.form.api_key = val" :default_value="this.form.api_key"/>
-      <v-input-normal label="Api secret"  @value="val => this.form.api_secret = val" :default_value="this.form.api_secret"/>
-      <v-input-normal label="Password"  @value="val => this.form.password = val" :default_value="this.form.password"/>
-
-      <v-checkboxes-standard :selected_item_ids="this.form.enabled ? [1] : null" @select="ids => this.form.enabled = ids.length > 0" :checkboxes="[{id: 1, title: 'Enabled'}]" />
-    </template>
-  </v-edit-form>
-
-  <v-confirm-modal title="Delete Exchange" msg="Do you really want to delete the exchange?" @close="this.setModalName(false)" @confirm="this.delete(this.id)" v-if="modalName === 'deleteConfirm'"/>
 </template>
-
 <style scoped>
-.page-heading{
-  display: grid;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.page-heading__eyebrow{
-  color: #ffb86b;
-  text-transform: uppercase;
-  letter-spacing: .14em;
-  font-size: 12px;
-  font-weight: 700;
-}
-.page-heading__copy{
-  max-width: 760px;
-  color: #93a3c1;
-  line-height: 1.6;
-}
+.connection-list {border-top: 1px solid #e2e5eb;}
+.exchange-row {display: grid; grid-template-columns: minmax(150px,1fr) minmax(220px,1.4fr) auto; gap: 24px; align-items: center; padding: 24px 0; border-bottom: 1px solid #e2e5eb;}
+.exchange-identity {display: flex; align-items: center; gap: 14px;}.exchange-identity h3 {margin: 0 0 3px;}
+.exchange-monogram {width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #d7dce5; border-radius: 7px; background: white; color: #536378; font-size: 13px; font-weight: 700;}
+small {display: block; color: #68717f; font-size: 12px;}.credential-status {font-size: 13px;}.credential-status svg {color: #7c8596; margin-right: 8px;}.credential-status small {margin-top: 4px;}
+.exchange-fields {display: grid; gap: 18px; margin: 24px 0;}.exchange-fields label {display: grid; gap: 7px; font-size: 13px;}.exchange-fields .check-row {display: flex; align-items: center;}
+@media(max-width:850px) {.exchange-row {grid-template-columns: 1fr; gap: 14px;}}
 </style>

@@ -1,9 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { Chart, CategoryScale, LinearScale, LineController, LineElement, PointElement, Title } from 'chart.js';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { Chart, CategoryScale, LinearScale, LineController, LineElement, PointElement, Title, Tooltip } from 'chart.js';
+import {applyChartPalette, chartPalette} from '@/utils/chartTheme.js';
 
 // Регистрация необходимых компонентов Chart.js
-Chart.register(CategoryScale, LinearScale, LineController, LineElement, PointElement, Title);
+Chart.register(CategoryScale, LinearScale, LineController, LineElement, PointElement, Title, Tooltip);
 
 const props = defineProps({
   trades: {
@@ -27,8 +28,8 @@ const createChart = () => {
       {
         label: 'Price',
         data: props.trades.map((trade) => trade.price),
-        borderColor: 'rgba(66, 185, 131, 1)',
-        backgroundColor: 'rgba(66, 185, 131, 0.3)',
+        borderColor: chartPalette().line,
+        backgroundColor: chartPalette().fill,
         fill: true,
         tension: 0.4, // Для сглаживания линий
       },
@@ -49,11 +50,16 @@ const createChart = () => {
       },
     },
   });
+  refreshTheme();
 };
+
+const refreshTheme = () => {if (chartInstance) applyChartPalette(chartInstance, chartPalette());};
 
 onMounted(() => {
   createChart();
+  window.addEventListener('arbinator:theme-change', refreshTheme);
 });
+onBeforeUnmount(() => {window.removeEventListener('arbinator:theme-change', refreshTheme); chartInstance?.destroy();});
 </script>
 
 <template>

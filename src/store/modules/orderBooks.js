@@ -1,6 +1,3 @@
-import store from "@/store/index.js";
-import { findArbitrageOpportunities } from "@/domain/arbitrage/findArbitrageOpportunities.js";
-import { normalizeObjectValues } from "@/utils/safePayload.js";
 
 const nodes = {
     namespaced: true,
@@ -37,16 +34,6 @@ const nodes = {
                 saleLowPrice: saleLow,
             };
 
-            store.commit('orderBooks/FIND_ARBITRAGE_OPPORTUNITY', state.ORDER_BOOKS);
-
-        },
-
-        FIND_ARBITRAGE_OPPORTUNITY(state, orderBooks) {
-            const normalized = Array.isArray(orderBooks)
-                ? orderBooks
-                : (orderBooks && typeof orderBooks === "object" ? orderBooks : {});
-            normalizeObjectValues(normalized);
-            state.ARBITRAGE_OPPORTUNITY = findArbitrageOpportunities(normalized, store.state.tradingPairs.TRADING_PAIRS);
         }
 
 
@@ -54,7 +41,6 @@ const nodes = {
     },
     state: {
         ORDER_BOOKS: {},
-        ARBITRAGE_OPPORTUNITY: []
     }
 }
 

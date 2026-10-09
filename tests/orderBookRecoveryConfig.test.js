@@ -116,3 +116,14 @@ test('normalize preserves ml shadow mode from backend config', () => {
   const form = normalizeConfigForm({ml_mode: 'shadow'});
   assert.equal(form.ml_mode, 'shadow');
 });
+
+test('bounded-risk settings preserve numeric payload and emergency block', () => {
+  const payload = buildConfigPayload({risk_per_trade_percent: '0.25', max_position_margin_usdt: '10',
+    max_leverage: '2', paper_latency_ms: '250', emergency_entry_block: true});
+  assert.equal(payload.risk_per_trade_percent, 0.25);
+  assert.equal(payload.max_position_margin_usdt, 10);
+  assert.equal(payload.max_leverage, 2);
+  assert.equal(payload.paper_latency_ms, 250);
+  assert.equal(payload.emergency_entry_block, true);
+  assert.equal(normalizeConfigForm({}).emergency_entry_block, true);
+});

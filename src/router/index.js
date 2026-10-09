@@ -4,7 +4,7 @@ const routes = [
     {
         path: "/",
         name: "home",
-        component: () => import("@/views/v-home.vue"),
+        redirect: '/orderbook-recovery',
     },
     {
         path: "/orderBooks",
@@ -34,7 +34,7 @@ const routes = [
     {
         path: "/arbitrage",
         name: "arbitrage",
-        component: () => import("@/views/arbitrage/v-arbitrage.vue"),
+        redirect: '/orderbook-recovery',
     },
     {
         path: "/futures",
@@ -44,13 +44,19 @@ const routes = [
     {
         path: "/research",
         name: "research",
-        component: () => import("@/views/research/v-research.vue"),
+        component: () => import("@/views/orderBookRecovery/v-order-book-recovery.vue"),
+        meta: {workspaceSection: 'research'},
     },
     {
         path: "/orderbook-recovery",
         name: "orderBookRecovery",
         component: () => import("@/views/orderBookRecovery/v-order-book-recovery.vue"),
+        meta: {workspaceSection: 'overview'},
     },
+    {path: '/positions', name: 'positions', component: () => import('@/views/orderBookRecovery/v-order-book-recovery.vue'), meta: {workspaceSection: 'positions'}},
+    {path: '/bot-settings', name: 'botSettings', component: () => import('@/views/orderBookRecovery/v-order-book-recovery.vue'), meta: {workspaceSection: 'settings'}},
+    {path: '/research/legacy', name: 'legacyResearch', component: () => import('@/views/research/v-research.vue')},
+    {path: '/:pathMatch(.*)*', redirect: '/orderbook-recovery'},
 ];
 
 

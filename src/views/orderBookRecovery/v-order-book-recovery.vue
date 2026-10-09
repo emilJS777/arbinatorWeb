@@ -2,9 +2,17 @@
 import {mapState} from "vuex";
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
+import {canStartPaper, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
 
 export default {
   computed: {
+    section() { return this.$route.meta.workspaceSection || 'overview'; },
+    pageTitle() { return sectionTitle(this.section); },
+    canStart() { return canStartPaper(this.statePayload?.config || this.config) && !this.formDirty; },
+    formDirty() {return this.form && this.savedForm && JSON.stringify(this.form) !== JSON.stringify(this.savedForm);},
+    visibleTrades() {return (this.trades || []).filter(trade => this.historyMode === 'all' || (trade.execution_mode || 'paper') === this.historyMode);},
+    reviewedChanges() {return settingsChanges(this.savedForm || {}, this.form || {});},
+    bookAge() {return snapshotAge(this.statePayload?.last_order_book_snapshot_time || this.debug?.last_order_book_snapshot_time, this.uiNow);},
     ...mapState({
       config: state => state.orderBookRecovery.CONFIG,
       options: state => state.orderBookRecovery.OPTIONS,
@@ -21,7 +29,7 @@ export default {
       return this.statePayload?.recovery_state || {};
     },
     openPosition() {
-      return this.statePayload?.open_position || this.metrics?.open_position || null;
+      return this.statePayload && Object.hasOwn(this.statePayload, 'open_position') ? this.statePayload.open_position : this.metrics?.open_position || null;
     },
     exchangeOptions() {
       return this.options?.exchanges || [];
@@ -84,6 +92,14 @@ export default {
   data() {
     return {
       form: null,
+      savedForm: null,
+      reviewOpen: false,
+      validationErrors: [],
+      initialLoading: true,
+      historyMode: 'all',
+      eventHandlers: {},
+      uiNow: Date.now(),
+      uiClock: null,
       poller: null,
       pollers: [],
       decisionDetails: null,
@@ -119,20 +135,27 @@ export default {
     };
   },
   mounted() {
-    this.load();
-    this.loadMlExplorer();
+    this.uiClock = setInterval(() => {this.uiNow = Date.now();}, 1000);
+    this.load().finally(() => {this.initialLoading = false;});
+    if (this.section === 'research') this.loadMlExplorer();
     this.startPolling();
-    this.emitter.on("orderbook_recovery.position_opened", () => this.refreshTradingData());
-    this.emitter.on("orderbook_recovery.position_closed", () => this.refreshTradingData());
-    this.emitter.on("orderbook_recovery.started", () => this.refreshStatusData());
-    this.emitter.on("orderbook_recovery.stopped", () => this.refreshStatusData());
+    this.eventHandlers = {
+      'orderbook_recovery.position_opened': () => this.refreshTradingData(),
+      'orderbook_recovery.position_closed': () => this.refreshTradingData(),
+      'orderbook_recovery.started': () => this.refreshStatusData(),
+      'orderbook_recovery.stopped': () => this.refreshStatusData(),
+    };
+    Object.entries(this.eventHandlers).forEach(([event, handler]) => this.emitter.on(event, handler));
   },
   beforeUnmount() {
+    clearInterval(this.uiClock);
     if (this.poller) clearInterval(this.poller);
     this.pollers.forEach(poller => clearInterval(poller));
     this.pollers = [];
+    Object.entries(this.eventHandlers).forEach(([event, handler]) => this.emitter.off(event, handler));
   },
   watch: {
+    section(value) {if (value === 'research') this.loadMlExplorer();},
     config: {
       immediate: true,
       handler() {
@@ -148,6 +171,12 @@ export default {
     },
   },
   methods: {
+    pnlEvidence,
+    listText(value) {return Array.isArray(value) ? value.join(', ') || '-' : '-';},
+    reviewSettings() {
+      this.validationErrors = validateSettings(this.form || {}, this.exchangeOptions);
+      if (!this.validationErrors.length) this.reviewOpen = true;
+    },
     load() {
       return this.$store.dispatch("orderBookRecovery/LOAD");
     },
@@ -180,13 +209,14 @@ export default {
       this.pollers = [
         setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_STATUS"), 5000),
         setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_TRADES"), 12000),
-        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS"), 25000),
-        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS"), 45000),
+        setInterval(() => {if (this.section === 'research') this.$store.dispatch("orderBookRecovery/LOAD_ML_STATS");}, 30000),
+        setInterval(() => this.$store.dispatch("orderBookRecovery/LOAD_DIAGNOSTICS"), 60000),
       ];
     },
     syncFormSelection() {
       if (!this.config || !this.options) return;
-      const form = normalizeConfigForm(this.form ? {...this.form, ...this.config} : {...this.config});
+      if (this.formDirty) return;
+      const form = normalizeConfigForm({...this.config});
       const exchange = this.resolveExchange(form);
       if (exchange) {
         form.exchange_id = exchange.id;
@@ -198,6 +228,7 @@ export default {
         form.symbol = pair.pair;
       }
       this.form = form;
+      this.savedForm = JSON.parse(JSON.stringify(form));
     },
     resolveExchange(form) {
       return resolveExchange(this.exchangeOptions, form);
@@ -220,6 +251,8 @@ export default {
       this.form.symbol = pair?.pair || "";
     },
     saveConfig() {
+      this.validationErrors = validateSettings(this.form || {}, this.exchangeOptions);
+      if (this.validationErrors.length) {this.reviewOpen = false; return;}
       if (!this.form?.exchange_id) {
         this.emitter.emit("toster", {success: false, msg: "Select exchange"});
         return;
@@ -234,10 +267,20 @@ export default {
           success: isResponseSuccess(res),
           msg: isResponseSuccess(res) ? "Config saved" : getResponseMessage(res),
         });
-        if (isResponseSuccess(res)) await this.refreshStatusData();
+        if (isResponseSuccess(res)) {
+          this.reviewOpen = false;
+          this.form = null;
+          this.savedForm = null;
+          this.syncFormSelection();
+          await this.refreshStatusData();
+        }
       });
     },
     async start() {
+      if (!this.canStart) {
+        this.emitter.emit('toster', {success: false, msg: this.formDirty ? 'Save settings before starting' : 'Live activation locked'});
+        return;
+      }
       if (this.form) {
         if (!this.form.exchange_id) {
           this.emitter.emit("toster", {success: false, msg: "Select exchange"});
@@ -248,17 +291,7 @@ export default {
           return;
         }
       }
-      if ((this.form?.execution_mode || this.config?.execution_mode) === "live") {
-        if (!window.confirm("You are enabling LIVE trading. Real orders may be placed on the exchange.")) return;
-      }
       await this.runAction("start", async () => {
-        if (this.form) {
-          const saveRes = await this.$store.dispatch("orderBookRecovery/SAVE_CONFIG", buildConfigPayload(this.form));
-          if (!isResponseSuccess(saveRes)) {
-            this.emitter.emit("toster", {success: false, msg: getResponseMessage(saveRes)});
-            return;
-          }
-        }
         const res = await this.$store.dispatch("orderBookRecovery/START");
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
@@ -277,7 +310,7 @@ export default {
     },
     closePosition() {
       if (!this.openPosition) return;
-      if (!window.confirm("Close current paper position manually?")) return;
+      if (!window.confirm(this.$t(this.openPosition.execution_mode === 'live' ? 'Close live position on the exchange? This sends a real closing order.' : 'Close current paper position manually?'))) return;
       this.runAction("closePosition", async () => {
         const res = await this.$store.dispatch("orderBookRecovery/CLOSE_MANUAL", this.openPosition.id);
         this.emitter.emit("toster", {
@@ -325,7 +358,7 @@ export default {
       return number.toFixed(digits);
     },
     dt(value) {
-      return value ? new Date(value).toLocaleString() : "-";
+      return Number.isFinite(utcTime(value)) ? new Date(utcTime(value)).toLocaleString(this.$locale.value === 'ru' ? 'ru-RU' : 'en-GB') : "-";
     },
     scannerStatusTone(status) {
       if (["active", "waiting"].includes(status)) return "positive";
@@ -394,12 +427,7 @@ export default {
       return "neutral";
     },
     formatProtectionStatus(trade) {
-      if ((trade?.execution_mode || "paper") !== "live") return "Not required";
-      if (trade?.tp_sl_protected) return "Protected";
-      if (trade?.tp_sl_error || trade?.live_status === "tp_sl_unprotected") return "Unprotected";
-      if (trade?.live_status === "open_failed") return "Not created";
-      if (trade?.live_status === "open" && !trade?.exchange_tp_order_id && !trade?.exchange_sl_order_id) return "Pending";
-      return "Not created";
+      return protectionLabel(trade, this.uiNow);
     },
     protectionTone(trade) {
       const status = this.formatProtectionStatus(trade);
@@ -411,6 +439,7 @@ export default {
     resultLabel(trade) {
       if (["open_failed", "close_failed"].includes(trade?.live_status)) return "Failed";
       if (!trade?.closed_at) return "Floating";
+      if (trade?.execution_mode === 'live' && pnlEvidence(trade) !== 'Exchange-reconciled PnL') return 'Unverified';
       if (trade?.live_status === "closed" && ["exchange_position_already_closed", "exchange_position_closed_external"].includes(trade?.reason_close)) return "Closed";
       return this.pnlLabel(trade);
     },
@@ -429,9 +458,7 @@ export default {
       return "";
     },
     feeIndicator(trade) {
-      if ((trade?.execution_mode || "paper") !== "live") return "";
-      const fees = Number(trade?.live_entry_fee || 0) + Number(trade?.live_exit_fee || 0);
-      return fees ? "net incl. fees" : "net/gross unknown";
+      return this.$t(pnlEvidence(trade));
     },
     prettyRaw(value) {
       if (!value) return "-";
@@ -767,291 +794,329 @@ export default {
 
 <template>
   <div class="recovery-page">
-    <div class="recovery-heading">
-      <p class="recovery-eyebrow margin-0">Paper Futures</p>
-      <h2 class="c-mode-1 margin-0">OrderBook Recovery</h2>
+    <div class="workspace-page-heading">
+      <div><div class="workspace-eyebrow">{{ $t("ORDER FLOW / FUTURES") }}</div><h1>{{ $t(pageTitle) }}</h1><p>{{ $t("OrderBookRecovery") }}<span v-if="config"> · {{ config.exchange }} / {{ config.symbol }} · {{ (config.execution_mode || 'paper').toUpperCase() }}</span></p></div>
+      <div class="action-row">
+        <button :disabled="actionLoading.refresh" @click="runAction('refresh', load)"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>{{ $t('Refresh') }}</button>
+        <button v-if="section === 'overview'" class="primary-button" :disabled="!canStart || actionLoading.start || statePayload?.enabled" @click="start"><i class="fa-solid fa-play" aria-hidden="true"></i>{{ $t('Start paper entries') }}</button>
+        <button v-if="section === 'overview'" :disabled="!config || actionLoading.stop" @click="stop"><i class="fa-solid fa-pause" aria-hidden="true"></i>{{ $t('Pause new entries') }}</button>
+      </div>
     </div>
+    <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
+    <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
-      {{ backendStatus.warning || 'Backend temporarily unavailable. Showing last successful data.' }}
+      {{ $t('Backend unavailable. Retained data may be out of date.') }}
     </div>
 
-    <section class="summary-grid">
+    <section v-if="section === 'overview'" class="summary-grid" :aria-label="$t('Overview')">
+      <div class="summary-card"><span>{{ $t('Entries') }}</span><strong>{{ !statePayload ? $t('No data yet') : $t(statePayload.enabled && !recoveryState.is_stopped ? 'Running' : 'Paused') }}</strong><small>{{ recoveryState.stop_reason || debug?.reason_if_not_trading || '—' }}</small></div>
+      <div class="summary-card"><span>{{ $t('Execution venue') }}</span><strong>{{ config?.exchange || '—' }}</strong><small>{{ config?.symbol || '—' }} · {{ config?.execution_mode || '—' }}</small></div>
+      <div class="summary-card"><span>{{ $t('Position exposure') }}</span><strong>{{ fmt(openPosition?.notional ?? (statePayload ? 0 : null), 2) }}</strong><small>{{ $t("USDT ·") }}{{ openPosition?.side || $t('No open position') }}</small></div>
+      <div class="summary-card"><span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}</strong><small>{{ $t("USDT ·") }}{{ $t('Mixed paper/live ledger. Not verified profit.') }}</small></div>
+    </section>
+    <section v-if="section === 'overview'" class="recovery-section">
+      <h3>{{ $t('Management and reconciliation') }}</h3>
+      <p class="workspace-notice neutral">{{ $t('Pausing entries does not close positions. Position management depends on the backend worker; check protection and reconciliation below.') }}</p>
+      <div class="metric-grid">
+        <div><span>{{ $t('Latest configured snapshot') }}</span><strong>{{ dt(statePayload?.last_order_book_snapshot_time || debug?.last_order_book_snapshot_time) }}</strong><small v-if="bookAge !== null" :class="bookAge > Number(config?.max_snapshot_age_seconds ?? 5) ? 'negative' : ''">{{ fmt(bookAge, 1) }}{{ $t("s ·") }}{{ $t(bookAge > Number(config?.max_snapshot_age_seconds ?? 5) ? 'Stale' : 'Fresh') }}</small></div>
+        <div><span>{{ $t('Entry blocked') }}</span><strong>{{ debug?.reason_if_not_trading || statePayload?.reason_if_not_trading || $t(statePayload ? 'No block reported' : 'No data yet') }}</strong></div>
+        <div><span>{{ $t('Protection') }}</span><strong>{{ openPosition ? $t(formatProtectionStatus(openPosition)) : '—' }}</strong></div>
+        <div><span>{{ $t('Reconciliation') }}</span><strong>{{ openPosition?.live_error || openPosition?.live_status || '—' }}</strong></div>
+      </div>
+    </section>
+    <section class="summary-grid" v-if="section === 'positions'">
       <div class="summary-card" :class="metricTone(metrics?.net_pnl)">
-        <span>Net PnL</span><strong>{{ fmt(metrics?.net_pnl, 2) }} USDT</strong>
+        <span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}{{ $t("USDT") }}</strong><small>{{ $t('Mixed paper/live ledger. Not verified profit.') }}</small>
       </div>
       <div class="summary-card positive">
-        <span>Total Wins</span><strong>{{ fmt(metrics?.total_win_pnl, 2) }} USDT</strong>
+        <span>{{ $t("Total Wins") }}</span><strong>{{ fmt(metrics?.total_win_pnl, 2) }}{{ $t("USDT") }}</strong>
       </div>
       <div class="summary-card negative">
-        <span>Total Losses</span><strong>{{ fmt(metrics?.total_loss_pnl, 2) }} USDT</strong>
+        <span>{{ $t("Total Losses") }}</span><strong>{{ fmt(metrics?.total_loss_pnl, 2) }}{{ $t("USDT") }}</strong>
       </div>
       <div class="summary-card neutral">
-        <span>Win Rate</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong>
+        <span>{{ $t("Win Rate") }}</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong>
       </div>
       <div class="summary-card neutral">
-        <span>Profit Factor</span><strong>{{ fmt(metrics?.profit_factor, 2) }}</strong>
+        <span>{{ $t("Profit Factor") }}</span><strong>{{ fmt(metrics?.profit_factor, 2) }}</strong>
       </div>
       <div class="summary-card neutral">
-        <span>Trades Count</span><strong>{{ metrics?.total_trades ?? 0 }}</strong>
+        <span>{{ $t("Trades Count") }}</span><strong>{{ metrics?.total_trades ?? 0 }}</strong>
       </div>
       <div class="summary-card neutral">
-        <span>Current Recovery Step</span><strong>{{ recoveryState.current_step ?? 0 }}</strong>
+        <span>{{ $t("Current Recovery Step") }}</span><strong>{{ recoveryState.current_step ?? 0 }}</strong>
       </div>
       <div class="summary-card neutral">
-        <span>Current Margin</span><strong>{{ fmt(recoveryState.current_margin, 2) }} USDT</strong>
+        <span>{{ $t("Current Margin") }}</span><strong>{{ fmt(recoveryState.current_margin, 2) }}{{ $t("USDT") }}</strong>
       </div>
     </section>
 
-    <section class="recovery-section" v-if="form">
+    <section class="recovery-section" v-if="form && section === 'settings'">
       <div class="section-title">
-        <h3>Config</h3>
+        <h3>{{ $t('Execution') }}</h3>
         <span :class="['mode-badge', form.execution_mode === 'live' ? 'live' : 'paper']">{{ (form.execution_mode || 'paper').toUpperCase() }}</span>
       </div>
       <div class="recovery-form">
-        <label>Execution mode
-          <select v-model="form.execution_mode">
-            <option value="paper">Paper</option>
-            <option value="live">Live</option>
+        <div class="workspace-notice neutral config-group-title">{{ $t('Live activation unavailable in this workspace') }}</div>
+        <label>{{ $t("Execution mode") }}<select v-model="form.execution_mode" :disabled="Boolean(openPosition)">
+            <option value="paper">{{ $t("Paper") }}</option>
+            <option value="live" disabled>{{ $t("Live") }}</option>
           </select>
         </label>
         <template v-if="form.execution_mode === 'live'">
-          <div class="live-warning">WARNING: Live mode places real orders on the selected exchange.</div>
-          <label class="check-row"><input v-model="form.live_enabled_confirmation" type="checkbox"/> Live enabled confirmation</label>
-          <label class="check-row"><input v-model="form.live_kill_switch" type="checkbox"/> Live kill switch</label>
-          <label>Live max margin USDT<input v-model.number="form.live_max_margin_usdt" type="number" step="0.1"/></label>
-          <label>Live max daily loss<input v-model.number="form.live_max_daily_loss_usdt" type="number" step="0.1"/></label>
-          <label>Live max total loss<input v-model.number="form.live_max_total_loss_usdt" type="number" step="0.1"/></label>
-          <label>Live open failed cooldown sec<input v-model.number="form.live_open_failed_cooldown_seconds" type="number" min="0" step="1"/></label>
-          <label class="check-row"><input v-model="form.live_fee_filter_enabled" type="checkbox"/> Live fee-aware entry filter</label>
-          <label>Taker fee % per side<input v-model.number="form.live_fee_filter_taker_fee_percent" type="number" min="0" step="0.01"/></label>
-          <label>Live order type
-            <select v-model="form.live_order_type">
-              <option value="market">Market</option>
+          <div class="live-warning">{{ $t("WARNING: Live mode places real orders on the selected exchange.") }}</div>
+          <label class="check-row"><input v-model="form.live_enabled_confirmation" :disabled="!form.live_enabled_confirmation" type="checkbox"/>{{ $t("Live enabled confirmation") }}</label>
+          <label class="check-row"><input v-model="form.live_kill_switch" :disabled="form.live_kill_switch" type="checkbox"/>{{ $t("Live kill switch") }}</label>
+          <label>{{ $t("Live max margin USDT") }}<input v-model.number="form.live_max_margin_usdt" type="number" step="0.1"/></label>
+          <label>{{ $t("Live max daily loss") }}<input v-model.number="form.live_max_daily_loss_usdt" type="number" step="0.1"/></label>
+          <label>{{ $t("Live max total loss") }}<input v-model.number="form.live_max_total_loss_usdt" type="number" step="0.1"/></label>
+          <label>{{ $t("Live open failed cooldown sec") }}<input v-model.number="form.live_open_failed_cooldown_seconds" type="number" min="0" step="1"/></label>
+          <label class="check-row"><input v-model="form.live_fee_filter_enabled" type="checkbox"/>{{ $t("Live fee-aware entry filter") }}</label>
+          <label>{{ $t("Taker fee % per side") }}<input v-model.number="form.live_fee_filter_taker_fee_percent" type="number" min="0" step="0.01"/></label>
+          <label>{{ $t("Live order type") }}<select v-model="form.live_order_type">
+              <option value="market">{{ $t("Market") }}</option>
             </select>
           </label>
-          <label class="check-row"><input v-model="form.live_reduce_only_close" type="checkbox"/> Reduce-only close</label>
+          <label class="check-row"><input v-model="form.live_reduce_only_close" type="checkbox"/>{{ $t("Reduce-only close") }}</label>
         </template>
-        <label>Exchange
-          <select v-model.number="form.exchange_id" @change="onExchangeChange">
-            <option :value="null" disabled>Select exchange</option>
+        <label>{{ $t("Exchange") }}<select v-model.number="form.exchange_id" @change="onExchangeChange">
+            <option :value="null" disabled>{{ $t("Select exchange") }}</option>
             <option v-for="exchange in exchangeOptions" :key="exchange.id" :value="exchange.id">{{ exchange.title }}</option>
           </select>
         </label>
-        <label>Symbol
-          <select v-model.number="form.trading_pair_id" :disabled="!form.exchange_id || !pairOptions.length" @change="onPairChange">
+        <label>{{ $t("Symbol") }}<select v-model.number="form.trading_pair_id" :disabled="!form.exchange_id || !pairOptions.length" @change="onPairChange">
             <option :value="null" disabled>{{ form.exchange_id && !pairOptions.length ? 'No active trading pairs for this exchange' : 'Select pair' }}</option>
             <option v-for="pair in pairOptions" :key="pair.id" :value="pair.id">{{ pair.pair }}</option>
           </select>
         </label>
-        <label>Base margin<input v-model.number="form.base_margin_usdt" type="number"/></label>
-        <label>Leverage<input v-model.number="form.leverage" type="number"/></label>
-        <label>Max recovery steps<input v-model.number="form.max_recovery_steps" type="number"/></label>
-        <label>Recovery multiplier<input v-model.number="form.recovery_multiplier" type="number" step="0.1"/></label>
-        <label>TP % of margin<input v-model.number="form.take_profit_percent_of_margin" type="number" step="0.1"/></label>
-        <label>SL % of margin<input v-model.number="form.stop_loss_percent_of_margin" type="number" step="0.1"/></label>
-        <label>Max daily loss<input v-model.number="form.max_daily_loss_usdt" type="number"/></label>
-        <label>Max total loss<input v-model.number="form.max_total_loss_usdt" type="number"/></label>
-        <label>Max open positions<input v-model.number="form.max_open_positions" type="number"/></label>
-        <label>Cooldown loss sec<input v-model.number="form.cooldown_after_loss_seconds" type="number"/></label>
-        <label>Cooldown win sec<input v-model.number="form.cooldown_after_win_seconds" type="number"/></label>
-        <label>Long imbalance<input v-model.number="form.long_imbalance_threshold" type="number" step="0.01"/></label>
-        <label>Short imbalance<input v-model.number="form.short_imbalance_threshold" type="number" step="0.01"/></label>
-        <label>Max spread %<input v-model.number="form.max_spread_percent" type="number" step="0.01"/></label>
-        <label>Momentum window<input v-model.number="form.momentum_window_snapshots" type="number"/></label>
-        <label>Min valid exchanges<input v-model.number="form.min_valid_exchanges" type="number"/></label>
-        <label>Min confirming exchanges<input v-model.number="form.min_confirming_exchanges" type="number"/></label>
-        <label>Min consensus ratio<input v-model.number="form.min_consensus_ratio" type="number" step="0.01"/></label>
-        <label>Max snapshot age sec<input v-model.number="form.max_snapshot_age_seconds" type="number" step="0.5"/></label>
-        <label>Anomaly min<input v-model.number="form.imbalance_anomaly_min" type="number" step="0.01"/></label>
-        <label>Anomaly max<input v-model.number="form.imbalance_anomaly_max" type="number" step="0.1"/></label>
-        <label>Entry mode
-          <select v-model="form.entry_mode">
-            <option value="instant">Instant</option>
-            <option value="two_step_confirmation">Two-step confirmation</option>
+        <h4 class="config-group-title">{{ $t('Risk & position sizing') }}<small>{{ $t("USDT ·") }}{{ $t('TP and SL are percentages of margin, not price movement.') }}</small></h4>
+        <label>{{ $t("Base margin · USDT") }}<input v-model.number="form.base_margin_usdt" type="number" min="0.01" step="0.01"/></label>
+        <label>{{ $t("Leverage") }}<input v-model.number="form.leverage" type="number"/></label>
+        <label>{{ $t("Max leverage") }}<input v-model.number="form.max_leverage" type="number" min="1" max="10"/></label>
+        <label>{{ $t("Risk per trade %") }}<input v-model.number="form.risk_per_trade_percent" type="number" min="0.01" max="1" step="0.01"/></label>
+        <label>{{ $t("Max position margin USDT") }}<input v-model.number="form.max_position_margin_usdt" type="number" min="0.01" step="0.01"/></label>
+        <label>{{ $t("Max consecutive losses") }}<input v-model.number="form.max_consecutive_losses" type="number" min="1"/></label>
+        <label class="checkbox-label"><input v-model="form.emergency_entry_block" type="checkbox"/>{{ $t("Block new entries") }}</label>
+        <label>{{ $t("Paper taker fee %") }}<input v-model.number="form.paper_taker_fee_percent" type="number" min="0" step="0.01"/></label>
+        <label>{{ $t("Paper latency ms") }}<input v-model.number="form.paper_latency_ms" type="number" min="0"/></label>
+        <label>{{ $t("TP % of margin") }}<input v-model.number="form.take_profit_percent_of_margin" type="number" step="0.1"/></label>
+        <label>{{ $t("SL % of margin") }}<input v-model.number="form.stop_loss_percent_of_margin" type="number" step="0.1"/></label>
+        <label>{{ $t("Max daily loss") }}<input v-model.number="form.max_daily_loss_usdt" type="number"/></label>
+        <label>{{ $t("Max total loss") }}<input v-model.number="form.max_total_loss_usdt" type="number"/></label>
+        <label>{{ $t("Max open positions") }}<input v-model.number="form.max_open_positions" type="number"/></label>
+        <label>{{ $t("Cooldown loss sec") }}<input v-model.number="form.cooldown_after_loss_seconds" type="number"/></label>
+        <label>{{ $t("Cooldown win sec") }}<input v-model.number="form.cooldown_after_win_seconds" type="number"/></label>
+        <details class="advanced-config"><summary>{{ $t('Advanced parameters') }}</summary><div class="recovery-form">
+        <h4 class="config-group-title">{{ $t('Signal rules') }}</h4>
+        <label>{{ $t("Long imbalance") }}<input v-model.number="form.long_imbalance_threshold" type="number" step="0.01"/></label>
+        <label>{{ $t("Short imbalance") }}<input v-model.number="form.short_imbalance_threshold" type="number" step="0.01"/></label>
+        <label>{{ $t("Max spread %") }}<input v-model.number="form.max_spread_percent" type="number" step="0.01"/></label>
+        <label>{{ $t("Momentum window") }}<input v-model.number="form.momentum_window_snapshots" type="number"/></label>
+        <h4 class="config-group-title">{{ $t('Cross-exchange confirmation') }}</h4>
+        <label>{{ $t("Min valid exchanges") }}<input v-model.number="form.min_valid_exchanges" type="number"/></label>
+        <label>{{ $t("Min confirming exchanges") }}<input v-model.number="form.min_confirming_exchanges" type="number"/></label>
+        <label>{{ $t("Min consensus ratio") }}<input v-model.number="form.min_consensus_ratio" type="number" step="0.01"/></label>
+        <label>{{ $t("Max snapshot age sec") }}<input v-model.number="form.max_snapshot_age_seconds" type="number" step="0.5"/></label>
+        <label>{{ $t("Anomaly min") }}<input v-model.number="form.imbalance_anomaly_min" type="number" step="0.01"/></label>
+        <label>{{ $t("Anomaly max") }}<input v-model.number="form.imbalance_anomaly_max" type="number" step="0.1"/></label>
+        <label>{{ $t("Entry mode") }}<select v-model="form.entry_mode">
+            <option value="instant">{{ $t("Instant") }}</option>
+            <option value="two_step_confirmation">{{ $t("Two-step confirmation") }}</option>
           </select>
         </label>
         <template v-if="form.entry_mode === 'two_step_confirmation'">
-          <label>Confirmation delay sec<input v-model.number="form.confirmation_delay_seconds" type="number" step="0.5"/></label>
-          <label>Confirmation max wait sec<input v-model.number="form.confirmation_max_wait_seconds" type="number" step="0.5"/></label>
-          <label>Min momentum delta<input v-model.number="form.confirmation_min_momentum_delta" type="number" step="0.000001"/></label>
-          <label class="check-row"><input v-model="form.confirmation_require_same_direction" type="checkbox"/> Require same direction</label>
-          <label class="check-row"><input v-model="form.confirmation_require_momentum_improvement" type="checkbox"/> Require momentum improvement</label>
-          <label class="check-row"><input v-model="form.confirmation_require_consensus_still_valid" type="checkbox"/> Require consensus still valid</label>
+          <label>{{ $t("Confirmation delay sec") }}<input v-model.number="form.confirmation_delay_seconds" type="number" step="0.5"/></label>
+          <label>{{ $t("Confirmation max wait sec") }}<input v-model.number="form.confirmation_max_wait_seconds" type="number" step="0.5"/></label>
+          <label>{{ $t("Min momentum delta") }}<input v-model.number="form.confirmation_min_momentum_delta" type="number" step="0.000001"/></label>
+          <label class="check-row"><input v-model="form.confirmation_require_same_direction" type="checkbox"/>{{ $t("Require same direction") }}</label>
+          <label class="check-row"><input v-model="form.confirmation_require_momentum_improvement" type="checkbox"/>{{ $t("Require momentum improvement") }}</label>
+          <label class="check-row"><input v-model="form.confirmation_require_consensus_still_valid" type="checkbox"/>{{ $t("Require consensus still valid") }}</label>
         </template>
-        <label>Max recovery cooldown sec<input v-model.number="form.cooldown_after_max_recovery_seconds" type="number"/></label>
-        <label>Feedback lookback<input v-model.number="form.feedback_lookback_trades" type="number"/></label>
-        <label>Side loss streak limit<input v-model.number="form.side_loss_streak_limit" type="number"/></label>
-        <label>Side cooldown sec<input v-model.number="form.side_cooldown_seconds" type="number"/></label>
-        <label>Min side win rate<input v-model.number="form.min_side_win_rate" type="number" step="1"/></label>
-        <label>Adaptive consensus boost<input v-model.number="form.adaptive_consensus_boost" type="number" step="0.01"/></label>
-        <label>Adaptive valid exchanges boost<input v-model.number="form.adaptive_min_valid_exchanges_boost" type="number"/></label>
-        <label class="check-row"><input v-model="form.momentum_confirmation_enabled" type="checkbox"/> Profit protection: momentum direction</label>
-        <label class="check-row"><input v-model="form.side_quality_filter_enabled" type="checkbox"/> Profit protection: side quality</label>
-        <label>Side quality lookback<input v-model.number="form.side_quality_lookback_trades" type="number" min="1"/></label>
-        <label>Side quality cooldown sec<input v-model.number="form.side_quality_cooldown_seconds" type="number" min="0"/></label>
-        <label>ML mode
-          <select v-model="form.ml_mode">
-            <option value="disabled">Disabled</option>
-            <option value="shadow">Shadow</option>
+        <label>{{ $t("Max recovery cooldown sec") }}<input v-model.number="form.cooldown_after_max_recovery_seconds" type="number"/></label>
+        <h4 class="config-group-title">{{ $t('Feedback protection') }}</h4>
+        <label>{{ $t("Feedback lookback") }}<input v-model.number="form.feedback_lookback_trades" type="number"/></label>
+        <label>{{ $t("Side loss streak limit") }}<input v-model.number="form.side_loss_streak_limit" type="number"/></label>
+        <label>{{ $t("Side cooldown sec") }}<input v-model.number="form.side_cooldown_seconds" type="number"/></label>
+        <label>{{ $t("Min side win rate") }}<input v-model.number="form.min_side_win_rate" type="number" step="1"/></label>
+        <label>{{ $t("Adaptive consensus boost") }}<input v-model.number="form.adaptive_consensus_boost" type="number" step="0.01"/></label>
+        <label>{{ $t("Adaptive valid exchanges boost") }}<input v-model.number="form.adaptive_min_valid_exchanges_boost" type="number"/></label>
+        <label class="check-row"><input v-model="form.momentum_confirmation_enabled" type="checkbox"/>{{ $t("Profit protection: momentum direction") }}</label>
+        <label class="check-row"><input v-model="form.side_quality_filter_enabled" type="checkbox"/>{{ $t("Profit protection: side quality") }}</label>
+        <label>{{ $t("Side quality lookback") }}<input v-model.number="form.side_quality_lookback_trades" type="number" min="1"/></label>
+        <label>{{ $t("Side quality cooldown sec") }}<input v-model.number="form.side_quality_cooldown_seconds" type="number" min="0"/></label>
+        <h4 class="config-group-title">{{ $t('ML dataset') }}</h4>
+        <label>{{ $t("ML mode") }}<select v-model="form.ml_mode">
+            <option value="disabled">{{ $t("Disabled") }}</option>
+            <option value="shadow">{{ $t("Shadow") }}</option>
           </select>
         </label>
-        <label class="check-row"><input v-model="form.ml_snapshot_capture_enabled" type="checkbox"/> Capture ML market snapshots</label>
-        <label>ML snapshot sample rate<input v-model.number="form.ml_snapshot_sample_rate" type="number" min="0" max="1" step="0.05"/></label>
-        <label>ML max snapshots / hour<input v-model.number="form.ml_max_snapshots_per_hour" type="number" min="1" step="100"/></label>
-        <label>Signal diagnostics max rows<input v-model.number="form.signal_diagnostics_max_rows" type="number" min="20" max="500" step="1"/></label>
-        <label>Paper equity<input v-model.number="form.paper_equity_usdt" type="number"/></label>
-        <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/> Consensus enabled</label>
-        <label class="check-row"><input v-model="form.use_median_imbalance" type="checkbox"/> Use median imbalance</label>
-        <label class="check-row"><input v-model="form.exclude_anomalous_imbalance" type="checkbox"/> Exclude imbalance anomalies</label>
-        <label class="check-row"><input v-model="form.feedback_enabled" type="checkbox"/> Feedback enabled</label>
-        <label class="check-row"><input v-model="form.require_configured_exchange_signal" type="checkbox"/> Require configured signal</label>
-        <label class="check-row"><input v-model="form.enabled" type="checkbox"/> Enabled</label>
+        <label class="check-row"><input v-model="form.ml_snapshot_capture_enabled" type="checkbox"/>{{ $t("Capture ML market snapshots") }}</label>
+        <label>{{ $t("ML snapshot sample rate") }}<input v-model.number="form.ml_snapshot_sample_rate" type="number" min="0" max="1" step="0.05"/></label>
+        <label>{{ $t("ML max snapshots / hour") }}<input v-model.number="form.ml_max_snapshots_per_hour" type="number" min="1" step="100"/></label>
+        <label>{{ $t("Signal diagnostics max rows") }}<input v-model.number="form.signal_diagnostics_max_rows" type="number" min="20" max="500" step="1"/></label>
+        <label>{{ $t("Paper equity") }}<input v-model.number="form.paper_equity_usdt" type="number"/></label>
+        <label class="check-row"><input v-model="form.consensus_enabled" type="checkbox"/>{{ $t("Consensus enabled") }}</label>
+        <label class="check-row"><input v-model="form.use_median_imbalance" type="checkbox"/>{{ $t("Use median imbalance") }}</label>
+        <label class="check-row"><input v-model="form.exclude_anomalous_imbalance" type="checkbox"/>{{ $t("Exclude imbalance anomalies") }}</label>
+        <label class="check-row"><input v-model="form.feedback_enabled" type="checkbox"/>{{ $t("Feedback enabled") }}</label>
+        <label class="check-row"><input v-model="form.require_configured_exchange_signal" type="checkbox"/>{{ $t("Require configured signal") }}</label>
+        <label class="check-row"><input v-model="form.enabled" :disabled="form.execution_mode === 'live' && !form.enabled" type="checkbox"/>{{ $t("Enabled") }}</label>
+        </div></details>
       </div>
+      <ul v-if="validationErrors.length" role="alert" class="workspace-notice"><li v-for="error in validationErrors" :key="error">{{ $t(error) }}</li></ul>
       <div class="action-row">
-        <button :disabled="actionLoading.saveConfig" @click="saveConfig"><i class="fa-solid fa-floppy-disk"></i> {{ actionLoading.saveConfig ? 'Saving...' : 'Save' }}</button>
-        <button :disabled="actionLoading.start" @click="start"><i class="fa-solid fa-play"></i> {{ actionLoading.start ? 'Starting...' : 'Start Paper' }}</button>
-        <button class="button-danger" :disabled="actionLoading.stop" @click="stop"><i class="fa-solid fa-stop"></i> {{ actionLoading.stop ? 'Stopping...' : 'Stop' }}</button>
+        <button class="primary-button" :disabled="actionLoading.saveConfig || !formDirty" @click="reviewSettings"><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ $t('Review changes') }}</button>
       </div>
     </section>
 
-    <section class="recovery-section">
-      <h3>State</h3>
+    <section class="recovery-section" v-if="section === 'settings'">
+      <h3>{{ $t("State") }}</h3>
       <div class="metric-grid">
-        <div><span>Base margin</span><strong>{{ fmt(config?.base_margin_usdt, 2) }} USDT</strong></div>
-        <div><span>Current step</span><strong>{{ recoveryState.current_step ?? 0 }}</strong></div>
-        <div><span>Current margin</span><strong>{{ fmt(recoveryState.current_margin, 2) }} USDT</strong></div>
-        <div><span>Live max margin</span><strong>{{ fmt(config?.live_max_margin_usdt, 2) }} USDT</strong></div>
-        <div><span>Estimated notional</span><strong>{{ fmt(estimatedNotional, 2) }} USDT</strong></div>
-        <div><span>Consecutive losses</span><strong>{{ recoveryState.consecutive_losses ?? 0 }}</strong></div>
-        <div><span>Status</span><strong>{{ debug?.status || statePayload?.status || (recoveryState.is_stopped ? 'stopped' : (config?.enabled ? 'running' : 'stopped')) }}</strong></div>
-        <div><span>Enabled</span><strong>{{ config?.enabled ? 'true' : 'false' }}</strong></div>
-        <div><span>Exchange</span><strong>{{ config?.exchange || '-' }}</strong></div>
-        <div><span>Symbol</span><strong>{{ config?.symbol || '-' }}</strong></div>
-        <div><span>Total PnL</span><strong>{{ fmt(metrics?.total_pnl, 2) }} USDT</strong></div>
-        <div><span>Win rate</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong></div>
-        <div><span>Max drawdown</span><strong>{{ fmt(metrics?.max_drawdown, 2) }} USDT</strong></div>
-        <div><span>Stop reason</span><strong>{{ recoveryState.stop_reason || '-' }}</strong></div>
-        <div><span>Paused until</span><strong>{{ dt(recoveryState.paused_until) }}</strong></div>
-        <div><span>Manual reset at</span><strong>{{ dt(recoveryState.last_manual_recovery_reset_at) }}</strong></div>
-        <div><span>Manual margin at</span><strong>{{ dt(recoveryState.last_manual_margin_override_at) }}</strong></div>
-        <div><span>Manual margin value</span><strong>{{ fmt(recoveryState.last_manual_margin_override_value, 2) }} USDT</strong></div>
+        <div><span>{{ $t("Base margin") }}</span><strong>{{ fmt(config?.base_margin_usdt, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Current step") }}</span><strong>{{ recoveryState.current_step ?? 0 }}</strong></div>
+        <div><span>{{ $t("Current margin") }}</span><strong>{{ fmt(recoveryState.current_margin, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Live max margin") }}</span><strong>{{ fmt(config?.live_max_margin_usdt, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Estimated notional") }}</span><strong>{{ fmt(estimatedNotional, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Consecutive losses") }}</span><strong>{{ recoveryState.consecutive_losses ?? 0 }}</strong></div>
+        <div><span>{{ $t("Status") }}</span><strong>{{ debug?.status || statePayload?.status || (recoveryState.is_stopped ? 'stopped' : (config?.enabled ? 'running' : 'stopped')) }}</strong></div>
+        <div><span>{{ $t("Enabled") }}</span><strong>{{ config?.enabled ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Exchange") }}</span><strong>{{ config?.exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Symbol") }}</span><strong>{{ config?.symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Total PnL") }}</span><strong>{{ fmt(metrics?.total_pnl, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Win rate") }}</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong></div>
+        <div><span>{{ $t("Max drawdown") }}</span><strong>{{ fmt(metrics?.max_drawdown, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Stop reason") }}</span><strong>{{ recoveryState.stop_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Paused until") }}</span><strong>{{ dt(recoveryState.paused_until) }}</strong></div>
+        <div><span>{{ $t("Manual reset at") }}</span><strong>{{ dt(recoveryState.last_manual_recovery_reset_at) }}</strong></div>
+        <div><span>{{ $t("Manual margin at") }}</span><strong>{{ dt(recoveryState.last_manual_margin_override_at) }}</strong></div>
+        <div><span>{{ $t("Manual margin value") }}</span><strong>{{ fmt(recoveryState.last_manual_margin_override_value, 2) }}{{ $t("USDT") }}</strong></div>
       </div>
       <div class="action-row">
-        <button :disabled="Boolean(openPosition) || actionLoading.resetRecovery" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> {{ actionLoading.resetRecovery ? 'Resetting...' : 'Reset recovery to base margin' }}</button>
+        <button :disabled="Boolean(openPosition) || actionLoading.resetRecovery" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> {{ $t(actionLoading.resetRecovery ? 'Resetting...' : 'Reset recovery to base margin') }}</button>
         <input v-model.number="manualMarginValue" :disabled="Boolean(openPosition)" min="0" step="0.1" type="number" placeholder="Current margin USDT"/>
-        <button :disabled="Boolean(openPosition) || actionLoading.setCurrentMargin" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> {{ actionLoading.setCurrentMargin ? 'Saving...' : 'Set current margin' }}</button>
+        <button :disabled="Boolean(openPosition) || actionLoading.setCurrentMargin" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> {{ $t(actionLoading.setCurrentMargin ? 'Saving...' : 'Set current margin') }}</button>
       </div>
     </section>
 
+    <details class="system-details" v-if="section === 'overview'"><summary>{{ $t('System & diagnostics') }}</summary>
     <section class="recovery-section">
-      <h3>Debug</h3>
+      <h3>{{ $t("Debug") }}</h3>
       <div class="debug-warning" v-if="debug?.reason_if_not_trading">
         {{ debug.reason_if_not_trading }}
       </div>
       <div class="metric-grid">
-        <div><span>Scanner hook</span><strong>{{ debug?.scanner_hook_active ? 'active' : 'waiting' }}</strong></div>
-        <div><span>Last hook</span><strong>{{ dt(debug?.last_scanner_hook_at) }}</strong></div>
-        <div><span>Snapshot time</span><strong>{{ dt(debug?.latest_snapshot?.updated_at || statePayload?.last_order_book_snapshot_time) }}</strong></div>
-        <div><span>Snapshot source exchange</span><strong>{{ debug?.last_snapshot_source_exchange || '-' }}</strong></div>
-        <div><span>Snapshot source pair</span><strong>{{ debug?.last_snapshot_source_pair || '-' }}</strong></div>
-        <div><span>Snapshot keys</span><strong>{{ (debug?.snapshot_keys || []).join(', ') || '-' }}</strong></div>
-        <div><span>Bids count</span><strong>{{ debug?.bids_count ?? '-' }}</strong></div>
-        <div><span>Asks count</span><strong>{{ debug?.asks_count ?? '-' }}</strong></div>
-        <div><span>Purchases count</span><strong>{{ debug?.purchases_count ?? '-' }}</strong></div>
-        <div><span>Sales count</span><strong>{{ debug?.sales_count ?? '-' }}</strong></div>
-        <div><span>Last evaluation</span><strong>{{ dt(debug?.last_evaluation?.evaluated_at || statePayload?.last_evaluation?.evaluated_at) }}</strong></div>
-        <div><span>Configured exchange</span><strong>{{ debug?.configured_exchange || '-' }}</strong></div>
-        <div><span>Hook exchange</span><strong>{{ debug?.last_hook_exchange || '-' }}</strong></div>
-        <div><span>Exchange match</span><strong>{{ debug?.exchange_match ? 'true' : 'false' }}</strong></div>
-        <div><span>Configured symbol</span><strong>{{ debug?.configured_symbol || '-' }}</strong></div>
-        <div><span>Hook symbol</span><strong>{{ debug?.last_hook_symbol || '-' }}</strong></div>
-        <div><span>Hook raw pair</span><strong>{{ debug?.last_hook_raw_pair || '-' }}</strong></div>
-        <div><span>Symbol match</span><strong>{{ debug?.symbol_match ? 'true' : 'false' }}</strong></div>
-        <div><span>Norm config exchange</span><strong>{{ debug?.normalized_config_exchange || '-' }}</strong></div>
-        <div><span>Norm hook exchange</span><strong>{{ debug?.normalized_hook_exchange || '-' }}</strong></div>
-        <div><span>Norm config symbol</span><strong>{{ debug?.normalized_config_symbol || '-' }}</strong></div>
-        <div><span>Norm hook symbol</span><strong>{{ debug?.normalized_hook_symbol || '-' }}</strong></div>
-        <div><span>Last decision</span><strong>{{ debug?.last_evaluation?.last_decision || statePayload?.last_evaluation?.last_decision || 'none' }}</strong></div>
-        <div><span>Reject reason</span><strong>{{ debug?.last_evaluation?.reject_reason || '-' }}</strong></div>
-        <div><span>Entry blocked</span><strong>{{ debug?.entry_blocked_reason || '-' }}</strong></div>
-        <div><span>Skip reason</span><strong>{{ debug?.entry_skip_reason || '-' }}</strong></div>
-        <div><span>Entry mode</span><strong>{{ debug?.entry_mode || config?.entry_mode || 'instant' }}</strong></div>
-        <div><span>Resolved live symbol</span><strong>{{ debug?.resolved_live_symbol || statePayload?.live_market?.resolved_live_symbol || '-' }}</strong></div>
-        <div><span>Live market type</span><strong>{{ debug?.live_market_type || statePayload?.live_market?.live_market_type || '-' }}</strong></div>
-        <div><span>Live market valid</span><strong>{{ debug?.live_market_valid ? 'true' : 'false' }}</strong></div>
-        <div><span>Live market error</span><strong>{{ debug?.live_market_error || statePayload?.live_market?.live_market_error || '-' }}</strong></div>
-        <div><span>Bid top 5</span><strong>{{ fmt(debug?.last_evaluation?.bid_volume_top_5, 2) }}</strong></div>
-        <div><span>Ask top 5</span><strong>{{ fmt(debug?.last_evaluation?.ask_volume_top_5, 2) }}</strong></div>
-        <div><span>Imbalance</span><strong>{{ fmt(debug?.last_evaluation?.imbalance, 4) }}</strong></div>
-        <div><span>Spread %</span><strong>{{ fmt(debug?.last_evaluation?.spread_percent, 4) }}</strong></div>
-        <div><span>Momentum</span><strong>{{ fmt(debug?.last_evaluation?.momentum, 8) }}</strong></div>
-        <div><span>Signals</span><strong>L: {{ debug?.last_evaluation?.long_signal ? 'yes' : 'no' }} / S: {{ debug?.last_evaluation?.short_signal ? 'yes' : 'no' }}</strong></div>
-        <div><span>Consensus direction</span><strong>{{ debug?.consensus_direction || 'none' }}</strong></div>
-        <div><span>Valid exchanges</span><strong>{{ debug?.valid_exchanges_count ?? 0 }}</strong></div>
-        <div><span>Long consensus</span><strong>{{ debug?.confirming_long_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_long, 2) }}</strong></div>
-        <div><span>Short consensus</span><strong>{{ debug?.confirming_short_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_short, 2) }}</strong></div>
-        <div><span>Median imbalance</span><strong>{{ fmt(debug?.median_imbalance, 4) }}</strong></div>
-        <div><span>Raw avg imbalance</span><strong>{{ fmt(debug?.raw_average_imbalance, 4) }}</strong></div>
-        <div><span>Avg imbalance</span><strong>{{ fmt(debug?.average_imbalance, 4) }}</strong></div>
-        <div><span>Avg momentum</span><strong>{{ fmt(debug?.average_momentum, 8) }}</strong></div>
-        <div><span>Anomalous exchanges</span><strong>{{ debug?.anomalous_exchanges_count ?? 0 }}</strong></div>
-        <div><span>Excluded anomalies</span><strong>{{ (debug?.excluded_anomalous_imbalance_exchanges || []).join(', ') || '-' }}</strong></div>
+        <div><span>{{ $t("Scanner hook") }}</span><strong>{{ debug?.scanner_hook_active ? 'active' : 'waiting' }}</strong></div>
+        <div><span>{{ $t("Last hook") }}</span><strong>{{ dt(debug?.last_scanner_hook_at) }}</strong></div>
+        <div><span>{{ $t("Snapshot time") }}</span><strong>{{ dt(debug?.latest_snapshot?.updated_at || statePayload?.last_order_book_snapshot_time) }}</strong></div>
+        <div><span>{{ $t("Snapshot source exchange") }}</span><strong>{{ debug?.last_snapshot_source_exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Snapshot source pair") }}</span><strong>{{ debug?.last_snapshot_source_pair || '-' }}</strong></div>
+        <div><span>{{ $t("Snapshot keys") }}</span><strong>{{ (debug?.snapshot_keys || []).join(', ') || '-' }}</strong></div>
+        <div><span>{{ $t("Bids count") }}</span><strong>{{ debug?.bids_count ?? '-' }}</strong></div>
+        <div><span>{{ $t("Asks count") }}</span><strong>{{ debug?.asks_count ?? '-' }}</strong></div>
+        <div><span>{{ $t("Purchases count") }}</span><strong>{{ debug?.purchases_count ?? '-' }}</strong></div>
+        <div><span>{{ $t("Sales count") }}</span><strong>{{ debug?.sales_count ?? '-' }}</strong></div>
+        <div><span>{{ $t("Last evaluation") }}</span><strong>{{ dt(debug?.last_evaluation?.evaluated_at || statePayload?.last_evaluation?.evaluated_at) }}</strong></div>
+        <div><span>{{ $t("Configured exchange") }}</span><strong>{{ debug?.configured_exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Hook exchange") }}</span><strong>{{ debug?.last_hook_exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Exchange match") }}</span><strong>{{ debug?.exchange_match ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Configured symbol") }}</span><strong>{{ debug?.configured_symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Hook symbol") }}</span><strong>{{ debug?.last_hook_symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Hook raw pair") }}</span><strong>{{ debug?.last_hook_raw_pair || '-' }}</strong></div>
+        <div><span>{{ $t("Symbol match") }}</span><strong>{{ debug?.symbol_match ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Norm config exchange") }}</span><strong>{{ debug?.normalized_config_exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Norm hook exchange") }}</span><strong>{{ debug?.normalized_hook_exchange || '-' }}</strong></div>
+        <div><span>{{ $t("Norm config symbol") }}</span><strong>{{ debug?.normalized_config_symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Norm hook symbol") }}</span><strong>{{ debug?.normalized_hook_symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Last decision") }}</span><strong>{{ debug?.last_evaluation?.last_decision || statePayload?.last_evaluation?.last_decision || 'none' }}</strong></div>
+        <div><span>{{ $t("Reject reason") }}</span><strong>{{ debug?.last_evaluation?.reject_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Entry blocked") }}</span><strong>{{ debug?.entry_blocked_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Skip reason") }}</span><strong>{{ debug?.entry_skip_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Entry mode") }}</span><strong>{{ debug?.entry_mode || config?.entry_mode || 'instant' }}</strong></div>
+        <div><span>{{ $t("Resolved live symbol") }}</span><strong>{{ debug?.resolved_live_symbol || statePayload?.live_market?.resolved_live_symbol || '-' }}</strong></div>
+        <div><span>{{ $t("Live market type") }}</span><strong>{{ debug?.live_market_type || statePayload?.live_market?.live_market_type || '-' }}</strong></div>
+        <div><span>{{ $t("Live market valid") }}</span><strong>{{ debug?.live_market_valid ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Live market error") }}</span><strong>{{ debug?.live_market_error || statePayload?.live_market?.live_market_error || '-' }}</strong></div>
+        <div><span>{{ $t("Bid top 5") }}</span><strong>{{ fmt(debug?.last_evaluation?.bid_volume_top_5, 2) }}</strong></div>
+        <div><span>{{ $t("Ask top 5") }}</span><strong>{{ fmt(debug?.last_evaluation?.ask_volume_top_5, 2) }}</strong></div>
+        <div><span>{{ $t("Imbalance") }}</span><strong>{{ fmt(debug?.last_evaluation?.imbalance, 4) }}</strong></div>
+        <div><span>{{ $t("Spread %") }}</span><strong>{{ fmt(debug?.last_evaluation?.spread_percent, 4) }}</strong></div>
+        <div><span>{{ $t("Momentum") }}</span><strong>{{ fmt(debug?.last_evaluation?.momentum, 8) }}</strong></div>
+        <div><span>{{ $t("Signals") }}</span><strong>{{ $t("L:") }}{{ debug?.last_evaluation?.long_signal ? 'yes' : 'no' }}{{ $t("/ S:") }}{{ debug?.last_evaluation?.short_signal ? 'yes' : 'no' }}</strong></div>
+        <div><span>{{ $t("Consensus direction") }}</span><strong>{{ debug?.consensus_direction || 'none' }}</strong></div>
+        <div><span>{{ $t("Valid exchanges") }}</span><strong>{{ debug?.valid_exchanges_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Long consensus") }}</span><strong>{{ debug?.confirming_long_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_long, 2) }}</strong></div>
+        <div><span>{{ $t("Short consensus") }}</span><strong>{{ debug?.confirming_short_count ?? 0 }} / {{ fmt(debug?.consensus_ratio_short, 2) }}</strong></div>
+        <div><span>{{ $t("Median imbalance") }}</span><strong>{{ fmt(debug?.median_imbalance, 4) }}</strong></div>
+        <div><span>{{ $t("Raw avg imbalance") }}</span><strong>{{ fmt(debug?.raw_average_imbalance, 4) }}</strong></div>
+        <div><span>{{ $t("Avg imbalance") }}</span><strong>{{ fmt(debug?.average_imbalance, 4) }}</strong></div>
+        <div><span>{{ $t("Avg momentum") }}</span><strong>{{ fmt(debug?.average_momentum, 8) }}</strong></div>
+        <div><span>{{ $t("Anomalous exchanges") }}</span><strong>{{ debug?.anomalous_exchanges_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Excluded anomalies") }}</span><strong>{{ (debug?.excluded_anomalous_imbalance_exchanges || []).join(', ') || '-' }}</strong></div>
       </div>
     </section>
 
     <section class="recovery-section">
-      <h3>Pending Entry</h3>
+      <h3>{{ $t("Pending Entry") }}</h3>
       <div class="metric-grid">
-        <div><span>Exists</span><strong>{{ debug?.pending_entry_exists ? 'yes' : 'no' }}</strong></div>
-        <div><span>Side</span><strong>{{ debug?.pending_entry_side || '-' }}</strong></div>
-        <div><span>Age</span><strong>{{ fmt(debug?.pending_entry_age_seconds, 2) }} sec</strong></div>
-        <div><span>Expires in</span><strong>{{ fmt(debug?.pending_entry_expires_in_seconds, 2) }} sec</strong></div>
-        <div><span>Created at</span><strong>{{ dt(debug?.pending_entry_created_at) }}</strong></div>
-        <div><span>Expires at</span><strong>{{ dt(debug?.pending_entry_expires_at) }}</strong></div>
-        <div><span>First momentum</span><strong>{{ fmt(debug?.pending_entry_first_momentum, 8) }}</strong></div>
-        <div><span>Current momentum</span><strong>{{ fmt(debug?.pending_entry_current_momentum, 8) }}</strong></div>
-        <div><span>First consensus</span><strong>{{ debug?.pending_entry_first_consensus || '-' }}</strong></div>
-        <div><span>Current consensus</span><strong>{{ debug?.pending_entry_current_consensus || '-' }}</strong></div>
-        <div><span>Status</span><strong>{{ debug?.pending_entry_status || '-' }}</strong></div>
-        <div><span>Reject reason</span><strong>{{ debug?.last_confirmation_reject_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Exists") }}</span><strong>{{ debug?.pending_entry_exists ? 'yes' : 'no' }}</strong></div>
+        <div><span>{{ $t("Side") }}</span><strong>{{ debug?.pending_entry_side || '-' }}</strong></div>
+        <div><span>{{ $t("Age") }}</span><strong>{{ fmt(debug?.pending_entry_age_seconds, 2) }}{{ $t("sec") }}</strong></div>
+        <div><span>{{ $t("Expires in") }}</span><strong>{{ fmt(debug?.pending_entry_expires_in_seconds, 2) }}{{ $t("sec") }}</strong></div>
+        <div><span>{{ $t("Created at") }}</span><strong>{{ dt(debug?.pending_entry_created_at) }}</strong></div>
+        <div><span>{{ $t("Expires at") }}</span><strong>{{ dt(debug?.pending_entry_expires_at) }}</strong></div>
+        <div><span>{{ $t("First momentum") }}</span><strong>{{ fmt(debug?.pending_entry_first_momentum, 8) }}</strong></div>
+        <div><span>{{ $t("Current momentum") }}</span><strong>{{ fmt(debug?.pending_entry_current_momentum, 8) }}</strong></div>
+        <div><span>{{ $t("First consensus") }}</span><strong>{{ debug?.pending_entry_first_consensus || '-' }}</strong></div>
+        <div><span>{{ $t("Current consensus") }}</span><strong>{{ debug?.pending_entry_current_consensus || '-' }}</strong></div>
+        <div><span>{{ $t("Status") }}</span><strong>{{ debug?.pending_entry_status || '-' }}</strong></div>
+        <div><span>{{ $t("Reject reason") }}</span><strong>{{ debug?.last_confirmation_reject_reason || '-' }}</strong></div>
       </div>
     </section>
 
     <section class="recovery-section">
-      <h3>Signal Feedback</h3>
+      <h3>{{ $t("Signal Feedback") }}</h3>
       <div class="metric-grid">
-        <div><span>Feedback enabled</span><strong>{{ debug?.feedback_enabled ? 'true' : 'false' }}</strong></div>
-        <div><span>Long win rate</span><strong>{{ fmt(debug?.long_recent_win_rate, 2) }}%</strong></div>
-        <div><span>Short win rate</span><strong>{{ fmt(debug?.short_recent_win_rate, 2) }}%</strong></div>
-        <div><span>Long loss streak</span><strong>{{ debug?.long_loss_streak ?? 0 }}</strong></div>
-        <div><span>Short loss streak</span><strong>{{ debug?.short_loss_streak ?? 0 }}</strong></div>
-        <div><span>Adaptive consensus ratio</span><strong>{{ fmt(debug?.adaptive_min_consensus_ratio, 2) }}</strong></div>
-        <div><span>Adaptive valid exchanges</span><strong>{{ debug?.adaptive_min_valid_exchanges ?? config?.min_valid_exchanges ?? 0 }}</strong></div>
-        <div><span>Blocked side</span><strong>{{ debug?.blocked_side || '-' }}</strong></div>
-        <div><span>Feedback reason</span><strong>{{ debug?.feedback_reject_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Feedback enabled") }}</span><strong>{{ debug?.feedback_enabled ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Long win rate") }}</span><strong>{{ fmt(debug?.long_recent_win_rate, 2) }}%</strong></div>
+        <div><span>{{ $t("Short win rate") }}</span><strong>{{ fmt(debug?.short_recent_win_rate, 2) }}%</strong></div>
+        <div><span>{{ $t("Long loss streak") }}</span><strong>{{ debug?.long_loss_streak ?? 0 }}</strong></div>
+        <div><span>{{ $t("Short loss streak") }}</span><strong>{{ debug?.short_loss_streak ?? 0 }}</strong></div>
+        <div><span>{{ $t("Adaptive consensus ratio") }}</span><strong>{{ fmt(debug?.adaptive_min_consensus_ratio, 2) }}</strong></div>
+        <div><span>{{ $t("Adaptive valid exchanges") }}</span><strong>{{ debug?.adaptive_min_valid_exchanges ?? config?.min_valid_exchanges ?? 0 }}</strong></div>
+        <div><span>{{ $t("Blocked side") }}</span><strong>{{ debug?.blocked_side || '-' }}</strong></div>
+        <div><span>{{ $t("Feedback reason") }}</span><strong>{{ debug?.feedback_reject_reason || '-' }}</strong></div>
       </div>
     </section>
 
-    <section class="recovery-section">
-      <h3>ML Market Snapshot Statistics</h3>
-      <div class="debug-warning" v-if="mlStats?.loading">Refreshing ML statistics...</div>
+    </details>
+
+    <section v-if="section === 'research'" class="recovery-section">
+      <h3>{{ $t('Replay & collection') }} <span class="status-badge">{{ $t('Inconclusive') }}</span></h3>
+      <p class="workspace-notice neutral">{{ $t('Collection and depth replay are CLI-only. This API does not expose collection jobs or replay reports. Dataset rows below are not replay trades.') }}</p>
+      <p>{{ $t('Use the frozen protocol and separate chronological development/evaluation files. Do not tune on evaluation data.') }}</p>
+      <details><summary>{{ $t('Historical research') }}</summary><div class="workspace-tabs"><router-link to="/research/legacy">{{ $t("FuturesTrend /") }}{{ $t('Research') }}</router-link><router-link to="/futures">{{ $t("FuturesTrend / Paper") }}</router-link><router-link to="/paper-trading">{{ $t('Closed history') }}{{ $t("/ Paper") }}</router-link></div></details>
+    </section>
+    <section class="recovery-section" v-if="section === 'research'">
+      <h3>{{ $t("ML Market Snapshot Statistics") }}</h3>
+      <div class="debug-warning" v-if="mlStats?.loading">{{ $t("Refreshing ML statistics...") }}</div>
       <div class="debug-warning" v-if="mlStats?.error">{{ mlStats.error }}</div>
-      <div class="metric-grid">
-        <div><span>Total market snapshots</span><strong>{{ mlMarketSnapshotStats.total }}</strong></div>
-        <div><span>Pending labels</span><strong>{{ mlMarketSnapshotStats.pending }}</strong></div>
-        <div><span>Labeled snapshots</span><strong>{{ mlMarketSnapshotStats.labeled }}</strong></div>
-        <div><span>Label completion</span><strong>{{ fmt(mlMarketSnapshotStats.completion, 2) }}%</strong></div>
-        <div><span>Exchange labels total</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsTotal }}</strong></div>
-        <div><span>Pending exchange labels</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsPending }}</strong></div>
-        <div><span>Labeled exchange labels</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsLabeled }}</strong></div>
-        <div><span>Exchange label completion</span><strong>{{ fmt(mlMarketSnapshotStats.exchangeLabelCompletion, 2) }}%</strong></div>
+      <p v-if="!mlStats?.lastSuccessfulAt">{{ $t('No data yet') }}</p>
+      <div class="metric-grid" v-else>
+        <div><span>{{ $t("Total market snapshots") }}</span><strong>{{ mlMarketSnapshotStats.total }}</strong></div>
+        <div><span>{{ $t("Pending labels") }}</span><strong>{{ mlMarketSnapshotStats.pending }}</strong></div>
+        <div><span>{{ $t("Labeled snapshots") }}</span><strong>{{ mlMarketSnapshotStats.labeled }}</strong></div>
+        <div><span>{{ $t("Label completion") }}</span><strong>{{ fmt(mlMarketSnapshotStats.completion, 2) }}%</strong></div>
+        <div><span>{{ $t("Exchange labels total") }}</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsTotal }}</strong></div>
+        <div><span>{{ $t("Pending exchange labels") }}</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsPending }}</strong></div>
+        <div><span>{{ $t("Labeled exchange labels") }}</span><strong>{{ mlMarketSnapshotStats.exchangeLabelsLabeled }}</strong></div>
+        <div><span>{{ $t("Exchange label completion") }}</span><strong>{{ fmt(mlMarketSnapshotStats.exchangeLabelCompletion, 2) }}%</strong></div>
       </div>
     </section>
 
-    <section class="recovery-section">
+    <section class="recovery-section" v-if="section === 'research'">
       <div class="section-title">
-        <h3>ML Dataset Explorer</h3>
-        <button @click="loadMlExplorer()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        <h3>{{ $t("ML Dataset Explorer") }}</h3>
+        <button @click="loadMlExplorer()"><i class="fa-solid fa-rotate"></i>{{ $t("Refresh") }}</button>
       </div>
       <div class="ml-tabs">
         <button
@@ -1059,69 +1124,62 @@ export default {
             :key="tab.key"
             :class="{active: mlExplorer.active === tab.key}"
             @click="setMlExplorerTab(tab.key)"
-        >{{ tab.label }}</button>
+        >{{ $t(tab.label) }}</button>
       </div>
       <div class="ml-filter-grid">
-        <label>Symbol<input v-model="mlExplorer.filters.symbol" placeholder="TON/USDT"/></label>
-        <label>Exchange<input v-model="mlExplorer.filters.exchange" placeholder="Mexc"/></label>
-        <label>Date from<input v-model="mlExplorer.filters.date_from" type="datetime-local"/></label>
-        <label>Date to<input v-model="mlExplorer.filters.date_to" type="datetime-local"/></label>
-        <label v-if="mlExplorer.active === 'feature'">Side
-          <select v-model="mlExplorer.filters.side">
-            <option value="">Any</option>
-            <option value="long">Long</option>
-            <option value="short">Short</option>
-            <option value="none">None</option>
+        <label>{{ $t("Symbol") }}<input v-model="mlExplorer.filters.symbol" placeholder="TON/USDT"/></label>
+        <label>{{ $t("Exchange") }}<input v-model="mlExplorer.filters.exchange" placeholder="Mexc"/></label>
+        <label>{{ $t("Date from") }}<input v-model="mlExplorer.filters.date_from" type="datetime-local"/></label>
+        <label>{{ $t("Date to") }}<input v-model="mlExplorer.filters.date_to" type="datetime-local"/></label>
+        <label v-if="mlExplorer.active === 'feature'">{{ $t("Side") }}<select v-model="mlExplorer.filters.side">
+            <option value="">{{ $t("Any") }}</option>
+            <option value="long">{{ $t("Long") }}</option>
+            <option value="short">{{ $t("Short") }}</option>
+            <option value="none">{{ $t("None") }}</option>
           </select>
         </label>
-        <label v-if="mlExplorer.active === 'feature'">Result
-          <select v-model="mlExplorer.filters.result">
-            <option value="">Any</option>
-            <option value="win">Win</option>
-            <option value="loss">Loss</option>
+        <label v-if="mlExplorer.active === 'feature'">{{ $t("Result") }}<select v-model="mlExplorer.filters.result">
+            <option value="">{{ $t("Any") }}</option>
+            <option value="win">{{ $t("Win") }}</option>
+            <option value="loss">{{ $t("Loss") }}</option>
           </select>
         </label>
-        <label v-if="mlExplorer.active === 'feature'">ML score
-          <select v-model="mlExplorer.filters.has_ml_score">
-            <option value="">Any</option>
-            <option value="true">Has score</option>
-            <option value="false">No score</option>
+        <label v-if="mlExplorer.active === 'feature'">{{ $t("ML score") }}<select v-model="mlExplorer.filters.has_ml_score">
+            <option value="">{{ $t("Any") }}</option>
+            <option value="true">{{ $t("Has score") }}</option>
+            <option value="false">{{ $t("No score") }}</option>
           </select>
         </label>
-        <label v-if="['market', 'exchange_label'].includes(mlExplorer.active)">Label status
-          <select v-model="mlExplorer.filters.label_status">
-            <option value="">Any</option>
-            <option value="pending">Pending</option>
-            <option value="labeled">Labeled</option>
+        <label v-if="['market', 'exchange_label'].includes(mlExplorer.active)">{{ $t("Label status") }}<select v-model="mlExplorer.filters.label_status">
+            <option value="">{{ $t("Any") }}</option>
+            <option value="pending">{{ $t("Pending") }}</option>
+            <option value="labeled">{{ $t("Labeled") }}</option>
           </select>
         </label>
-        <label>Sort by
-          <select v-model="mlExplorer.filters.sort_by">
-            <option value="timestamp">Timestamp</option>
-            <option value="id">ID</option>
-            <option value="symbol">Symbol</option>
-            <option value="exchange">Exchange</option>
-            <option value="label_status" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">Label status</option>
-            <option value="future_return_10s" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">10s return</option>
-            <option value="ml_score" v-if="mlExplorer.active === 'feature'">ML score</option>
-            <option value="mid_price" v-if="mlExplorer.active === 'price_history'">Mid price</option>
+        <label>{{ $t("Sort by") }}<select v-model="mlExplorer.filters.sort_by">
+            <option value="timestamp">{{ $t("Timestamp") }}</option>
+            <option value="id">{{ $t("ID") }}</option>
+            <option value="symbol">{{ $t("Symbol") }}</option>
+            <option value="exchange">{{ $t("Exchange") }}</option>
+            <option value="label_status" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">{{ $t("Label status") }}</option>
+            <option value="future_return_10s" v-if="['market', 'exchange_label'].includes(mlExplorer.active)">{{ $t("10s return") }}</option>
+            <option value="ml_score" v-if="mlExplorer.active === 'feature'">{{ $t("ML score") }}</option>
+            <option value="mid_price" v-if="mlExplorer.active === 'price_history'">{{ $t("Mid price") }}</option>
           </select>
         </label>
-        <label>Sort
-          <select v-model="mlExplorer.filters.sort_dir">
-            <option value="desc">Desc</option>
-            <option value="asc">Asc</option>
+        <label>{{ $t("Sort") }}<select v-model="mlExplorer.filters.sort_dir">
+            <option value="desc">{{ $t("Desc") }}</option>
+            <option value="asc">{{ $t("Asc") }}</option>
           </select>
         </label>
       </div>
       <div class="action-row">
-        <button @click="applyMlExplorerFilters"><i class="fa-solid fa-filter"></i> Apply filters</button>
-        <button @click="resetMlExplorerFilters"><i class="fa-solid fa-eraser"></i> Reset</button>
-        <button @click="exportMlExplorer('csv')"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
-        <button @click="exportMlExplorer('json')"><i class="fa-solid fa-file-code"></i> Export JSON</button>
-        <button class="button-danger" :disabled="actionLoading.clearMlDataset" @click="clearMlDataset"><i class="fa-solid fa-trash"></i> {{ actionLoading.clearMlDataset ? 'Clearing...' : 'Clear ML dataset' }}</button>
-        <label class="inline-select">Page size
-          <select :value="activeMlExplorerData.page_size" @change="changeMlExplorerPageSize">
+        <button @click="applyMlExplorerFilters"><i class="fa-solid fa-filter"></i>{{ $t("Apply filters") }}</button>
+        <button @click="resetMlExplorerFilters"><i class="fa-solid fa-eraser"></i>{{ $t("Reset") }}</button>
+        <button @click="exportMlExplorer('csv')"><i class="fa-solid fa-file-csv"></i>{{ $t("Export CSV") }}</button>
+        <button @click="exportMlExplorer('json')"><i class="fa-solid fa-file-code"></i>{{ $t("Export JSON") }}</button>
+        <button class="button-danger" :disabled="actionLoading.clearMlDataset" @click="clearMlDataset"><i class="fa-solid fa-trash"></i> {{ $t(actionLoading.clearMlDataset ? 'Clearing...' : 'Clear ML dataset') }}</button>
+        <label class="inline-select">{{ $t("Page size") }}<select :value="activeMlExplorerData.page_size" @change="changeMlExplorerPageSize">
             <option :value="25">25</option>
             <option :value="50">50</option>
             <option :value="100">100</option>
@@ -1131,7 +1189,7 @@ export default {
         </label>
       </div>
       <div class="debug-warning" v-if="mlExplorer.error">{{ mlExplorer.error }}</div>
-      <div class="empty-row" v-if="mlExplorer.loading">Loading ML dataset...</div>
+      <div class="empty-row" v-if="mlExplorer.loading">{{ $t("Loading ML dataset...") }}</div>
       <div class="recovery-table recovery-table--ml" v-else>
         <div class="recovery-row recovery-row--head recovery-row--ml" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}">
           <span v-for="column in activeMlExplorerColumns" :key="column">{{ column.replaceAll('_', ' ') }}</span>
@@ -1139,49 +1197,49 @@ export default {
         <button class="recovery-row recovery-row--ml recovery-row--clickable" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}" v-for="row in activeMlExplorerData.items" :key="`${mlExplorer.active}-${row.id}`" @click="openMlExplorerDetail(row)">
           <span v-for="column in activeMlExplorerColumns" :key="column" :class="{'status-pill': ['label_status', 'result', 'final_side', 'proposed_side'].includes(column), [mlExplorerBadgeTone(row[column])]: ['label_status', 'result', 'final_side', 'proposed_side'].includes(column)}">{{ mlExplorerCell(row, column) }}</span>
         </button>
-        <div class="empty-row" v-if="!activeMlExplorerData.items.length">No ML dataset rows found</div>
+        <div class="empty-row" v-if="!activeMlExplorerData.items.length">{{ $t("No ML dataset rows found") }}</div>
       </div>
       <div class="pagination-row">
         <button :disabled="activeMlExplorerData.page <= 1" @click="changeMlExplorerPage(-1)"><i class="fa-solid fa-chevron-left"></i></button>
-        <span>Page {{ activeMlExplorerData.page }} / {{ activeMlExplorerData.total_pages || 1 }} · {{ activeMlExplorerData.total }} rows</span>
+        <span>{{ $t("Page") }}{{ activeMlExplorerData.page }} / {{ activeMlExplorerData.total_pages || 1 }} · {{ activeMlExplorerData.total }}{{ $t("rows") }}</span>
         <button :disabled="activeMlExplorerData.page >= activeMlExplorerData.total_pages" @click="changeMlExplorerPage(1)"><i class="fa-solid fa-chevron-right"></i></button>
       </div>
     </section>
 
-    <section class="recovery-section">
+    <section class="recovery-section" v-if="section === 'research'">
       <div class="section-title">
-        <h3>Signal Diagnostics</h3>
-        <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i> Clear diagnostics</button>
+        <h3>{{ $t("Signal Diagnostics") }}</h3>
+        <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i>{{ $t("Clear diagnostics") }}</button>
       </div>
       <div class="metric-grid">
-        <div><span>Long signals</span><strong>{{ debug?.long_signals_count ?? 0 }}</strong></div>
-        <div><span>Short signals</span><strong>{{ debug?.short_signals_count ?? 0 }}</strong></div>
-        <div><span>Long opened</span><strong>{{ debug?.long_opened_count ?? 0 }}</strong></div>
-        <div><span>Short opened</span><strong>{{ debug?.short_opened_count ?? 0 }}</strong></div>
-        <div><span>Raw long hits</span><strong>{{ debug?.raw_long_threshold_hits ?? 0 }}</strong></div>
-        <div><span>Raw short hits</span><strong>{{ debug?.raw_short_threshold_hits ?? 0 }}</strong></div>
-        <div><span>Long consensus passed</span><strong>{{ debug?.long_consensus_passed_count ?? 0 }}</strong></div>
-        <div><span>Short consensus passed</span><strong>{{ debug?.short_consensus_passed_count ?? 0 }}</strong></div>
-        <div><span>Long blocked</span><strong>{{ debug?.long_blocked_count ?? 0 }}</strong></div>
-        <div><span>Short blocked</span><strong>{{ debug?.short_blocked_count ?? 0 }}</strong></div>
-        <div><span>Final long</span><strong>{{ debug?.final_long_count ?? 0 }}</strong></div>
-        <div><span>Final short</span><strong>{{ debug?.final_short_count ?? 0 }}</strong></div>
-        <div><span>Max rows</span><strong>{{ config?.signal_diagnostics_max_rows ?? 100 }}</strong></div>
-        <div><span>ML mode</span><strong>{{ config?.ml_mode || 'disabled' }}</strong></div>
-        <div><span>ML score</span><strong>{{ debug?.ml_score ?? '-' }}</strong></div>
-        <div><span>ML decision</span><strong>{{ debug?.ml_decision || '-' }}</strong></div>
+        <div><span>{{ $t("Long signals") }}</span><strong>{{ debug?.long_signals_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Short signals") }}</span><strong>{{ debug?.short_signals_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Long opened") }}</span><strong>{{ debug?.long_opened_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Short opened") }}</span><strong>{{ debug?.short_opened_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Raw long hits") }}</span><strong>{{ debug?.raw_long_threshold_hits ?? 0 }}</strong></div>
+        <div><span>{{ $t("Raw short hits") }}</span><strong>{{ debug?.raw_short_threshold_hits ?? 0 }}</strong></div>
+        <div><span>{{ $t("Long consensus passed") }}</span><strong>{{ debug?.long_consensus_passed_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Short consensus passed") }}</span><strong>{{ debug?.short_consensus_passed_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Long blocked") }}</span><strong>{{ debug?.long_blocked_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Short blocked") }}</span><strong>{{ debug?.short_blocked_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Final long") }}</span><strong>{{ debug?.final_long_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Final short") }}</span><strong>{{ debug?.final_short_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Max rows") }}</span><strong>{{ config?.signal_diagnostics_max_rows ?? 100 }}</strong></div>
+        <div><span>{{ $t("ML mode") }}</span><strong>{{ config?.ml_mode || 'disabled' }}</strong></div>
+        <div><span>{{ $t("ML score") }}</span><strong>{{ debug?.ml_score ?? '-' }}</strong></div>
+        <div><span>{{ $t("ML decision") }}</span><strong>{{ debug?.ml_decision || '-' }}</strong></div>
       </div>
       <div class="debug-warning" v-if="sideBiasWarning">{{ sideBiasWarning }}</div>
       <div class="action-row">
-        <button @click="exportMlDataset('csv')"><i class="fa-solid fa-database"></i> Export ML dataset</button>
-        <button @click="exportMlDataset('json')"><i class="fa-solid fa-file-code"></i> Export ML JSON</button>
-        <button @click="exportMlMarketSnapshots('csv')"><i class="fa-solid fa-table"></i> Export market snapshots</button>
-        <button @click="exportMlMarketSnapshots('json')"><i class="fa-solid fa-file-code"></i> Export market JSON</button>
-        <button @click="exportMlExchangeLabels('csv')"><i class="fa-solid fa-layer-group"></i> Export exchange labels</button>
-        <button @click="exportMlExchangeLabels('json')"><i class="fa-solid fa-file-code"></i> Export labels JSON</button>
+        <button @click="exportMlDataset('csv')"><i class="fa-solid fa-database"></i>{{ $t("Export ML dataset") }}</button>
+        <button @click="exportMlDataset('json')"><i class="fa-solid fa-file-code"></i>{{ $t("Export ML JSON") }}</button>
+        <button @click="exportMlMarketSnapshots('csv')"><i class="fa-solid fa-table"></i>{{ $t("Export market snapshots") }}</button>
+        <button @click="exportMlMarketSnapshots('json')"><i class="fa-solid fa-file-code"></i>{{ $t("Export market JSON") }}</button>
+        <button @click="exportMlExchangeLabels('csv')"><i class="fa-solid fa-layer-group"></i>{{ $t("Export exchange labels") }}</button>
+        <button @click="exportMlExchangeLabels('json')"><i class="fa-solid fa-file-code"></i>{{ $t("Export labels JSON") }}</button>
       </div>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>Time</span><span>Median</span><span>Momentum</span><span>Long</span><span>Short</span><span>L ratio</span><span>S ratio</span><span>Proposed</span><span>Final</span><span>ML score</span><span>ML decision</span><span>Short hit</span><span>Cfg L/S</span><span>Short blocks</span><span>Why long</span><span>Why short rejected</span><span>Skip</span><span>Reject</span><span>L win</span><span>S win</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>{{ $t("Time") }}</span><span>{{ $t("Median") }}</span><span>{{ $t("Momentum") }}</span><span>{{ $t("Long") }}</span><span>{{ $t("Short") }}</span><span>{{ $t("L ratio") }}</span><span>{{ $t("S ratio") }}</span><span>{{ $t("Proposed") }}</span><span>{{ $t("Final") }}</span><span>{{ $t("ML score") }}</span><span>{{ $t("ML decision") }}</span><span>{{ $t("Short hit") }}</span><span>{{ $t("Cfg L/S") }}</span><span>{{ $t("Short blocks") }}</span><span>{{ $t("Why long") }}</span><span>{{ $t("Why short rejected") }}</span><span>{{ $t("Skip") }}</span><span>{{ $t("Reject") }}</span><span>{{ $t("L win") }}</span><span>{{ $t("S win") }}</span></div>
         <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
           <span>{{ dt(row.timestamp) }}</span>
           <span>{{ fmt(row.median_imbalance, 4) }}</span>
@@ -1196,7 +1254,7 @@ export default {
           <span>{{ row.ml_decision || '-' }}</span>
           <span>{{ row.short_threshold_hit ? 'yes' : 'no' }}</span>
           <span>{{ row.configured_exchange_long_signal ? 'L' : '-' }} / {{ row.configured_exchange_short_signal ? 'S' : '-' }}</span>
-          <span>C:{{ row.short_blocked_by_consensus ? 'yes' : 'no' }} CFG:{{ row.short_blocked_by_configured_exchange ? 'yes' : 'no' }} FB:{{ row.short_blocked_by_feedback ? 'yes' : 'no' }}</span>
+          <span>{{ $t("C:") }}{{ row.short_blocked_by_consensus ? 'yes' : 'no' }}{{ $t("CFG:") }}{{ row.short_blocked_by_configured_exchange ? 'yes' : 'no' }}{{ $t("FB:") }}{{ row.short_blocked_by_feedback ? 'yes' : 'no' }}</span>
           <span>{{ row.why_long_selected || '-' }}</span>
           <span>{{ row.why_short_rejected || '-' }}</span>
           <span>{{ row.skip_reason || '-' }}</span>
@@ -1204,14 +1262,14 @@ export default {
           <span>{{ fmt(row.long_win_rate, 2) }}%</span>
           <span>{{ fmt(row.short_win_rate, 2) }}%</span>
         </div>
-        <div class="empty-row" v-if="!(debug?.signal_diagnostics_last_100 || []).length">No signal diagnostics yet</div>
+        <div class="empty-row" v-if="!(debug?.signal_diagnostics_last_100 || []).length">{{ $t("No signal diagnostics yet") }}</div>
       </div>
     </section>
 
-    <section class="recovery-section">
-      <h3>Multi-exchange consensus</h3>
+    <section class="recovery-section" v-if="section === 'overview'">
+      <h3>{{ $t("Multi-exchange consensus") }}</h3>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--consensus"><span>Exchange</span><span>Valid</span><span>Imbalance</span><span>Raw imbalance</span><span>Anomaly</span><span>Spread %</span><span>Momentum</span><span>Long</span><span>Short</span><span>Reject reason</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--consensus"><span>{{ $t("Exchange") }}</span><span>{{ $t("Valid") }}</span><span>{{ $t("Imbalance") }}</span><span>{{ $t("Raw imbalance") }}</span><span>{{ $t("Anomaly") }}</span><span>{{ $t("Spread %") }}</span><span>{{ $t("Momentum") }}</span><span>{{ $t("Long") }}</span><span>{{ $t("Short") }}</span><span>{{ $t("Reject reason") }}</span></div>
         <div class="recovery-row recovery-row--consensus" v-for="row in (debug?.per_exchange_features || [])" :key="`${row.exchange}-${row.symbol}`">
           <span>{{ row.exchange }}</span>
           <span>{{ row.valid ? 'yes' : 'no' }}</span>
@@ -1224,66 +1282,73 @@ export default {
           <span>{{ row.short_signal ? 'yes' : 'no' }}</span>
           <span>{{ row.reject_reason || '-' }}</span>
         </div>
-        <div class="empty-row" v-if="!(debug?.per_exchange_features || []).length">No consensus snapshots yet</div>
+        <div class="empty-row" v-if="!(debug?.per_exchange_features || []).length">{{ $t("No consensus snapshots yet") }}</div>
       </div>
     </section>
 
+    <details class="system-details" v-if="section === 'overview'"><summary>{{ $t('Scanner Diagnostics') }}</summary>
     <section class="recovery-section">
-      <h3>Scanner Diagnostics</h3>
+      <h3>{{ $t("Scanner Diagnostics") }}</h3>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--scanner"><span>Exchange</span><span>Symbol</span><span>Status</span><span>Latency</span><span>Stale sec</span><span>Last success</span><span>Last error</span><span>Error</span><span>Cooldown</span></div>
+        <div class="recovery-row recovery-row--head recovery-row--scanner"><span>{{ $t("Exchange") }}</span><span>{{ $t("Symbol") }}</span><span>{{ $t("Status") }}</span><span>{{ $t("Latency") }}</span><span>{{ $t("Stale sec") }}</span><span>{{ $t("Last success") }}</span><span>{{ $t("Last error") }}</span><span>{{ $t("Error") }}</span><span>{{ $t("Cooldown") }}</span></div>
         <div class="recovery-row recovery-row--scanner" v-for="row in scannerDiagnostics" :key="`${row.exchange}-${row.symbol}`">
           <span>{{ row.exchange }}</span>
           <span>{{ row.symbol }}</span>
           <span :class="['result-pill', scannerStatusTone(row.status)]">{{ row.status || '-' }}</span>
-          <span>{{ fmt(row.latency_ms, 1) }} ms</span>
+          <span>{{ fmt(row.latency_ms, 1) }}{{ $t("ms") }}</span>
           <span>{{ fmt(row.stale_seconds, 2) }}</span>
           <span>{{ dt(row.last_success_at) }}</span>
           <span>{{ dt(row.last_error_at) }}</span>
           <span>{{ row.error_message || '-' }}</span>
           <span>{{ dt(row.cooldown_until) }}</span>
         </div>
-        <div class="empty-row" v-if="!scannerDiagnostics.length">No scanner diagnostics yet</div>
+        <div class="empty-row" v-if="!scannerDiagnostics.length">{{ $t("No scanner diagnostics yet") }}</div>
       </div>
     </section>
 
-    <section class="recovery-section">
-      <h3>Open Position</h3>
+    </details>
+    <section class="recovery-section" v-if="['overview', 'positions'].includes(section)">
+      <h3>{{ $t("Open Position") }}</h3>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head"><span>Side</span><span>Margin</span><span>Notional</span><span>Entry</span><span>PnL</span></div>
+        <div class="recovery-row recovery-row--head"><span>{{ $t("Side") }}</span><span>{{ $t("Margin") }}</span><span>{{ $t("Notional") }}</span><span>{{ $t("Entry") }}</span><span>{{ $t("PnL") }}</span></div>
         <div class="recovery-row" v-if="openPosition">
           <span>{{ openPosition.side }}</span>
           <span>{{ fmt(openPosition.margin, 2) }}</span>
           <span>{{ fmt(openPosition.notional, 2) }}</span>
           <span>{{ fmt(openPosition.entry_price, 4) }}</span>
-          <span>{{ fmt(openPosition.pnl, 4) }}</span>
+          <span>{{ fmt(openPosition.pnl, 4) }}<small>{{ $t(pnlEvidence(openPosition)) }}</small></span>
         </div>
-        <div class="empty-row" v-else>No open position</div>
+        <div class="empty-row" v-else>{{ $t("No open position") }}</div>
       </div>
       <div class="action-row" v-if="openPosition">
-        <button class="button-danger" :disabled="actionLoading.closePosition" @click="closePosition"><i class="fa-solid fa-xmark"></i> {{ actionLoading.closePosition ? 'Closing...' : 'Close Position' }}</button>
+        <button class="button-danger" :disabled="actionLoading.closePosition" @click="closePosition"><i class="fa-solid fa-xmark"></i> {{ $t(actionLoading.closePosition ? 'Closing...' : 'Close Position') }}</button>
       </div>
     </section>
 
-    <section class="recovery-section">
-      <h3>Last Trades</h3>
+    <section class="recovery-section" v-if="section === 'positions'">
+      <h3>{{ $t("Last Trades") }}</h3>
       <div class="action-row">
-        <label class="check-row"><input :checked="showArchived" type="checkbox" @change="setShowArchived"/> Show archived trades</label>
+        <label>{{ $t('Mode') }}<select v-model="historyMode"><option value="all">{{ $t('All modes') }}</option><option value="paper">{{ $t("Paper") }}</option><option value="live">{{ $t("Live") }}</option></select></label>
+        <label class="check-row"><input :checked="showArchived" type="checkbox" @change="setShowArchived"/>{{ $t("Show archived trades") }}</label>
         <button :disabled="actionLoading['exportTrades:csv']" @click="exportTrades('csv')"><i class="fa-solid fa-file-csv"></i> {{ actionLoading['exportTrades:csv'] ? 'Exporting...' : 'Export non-archived trades' }}</button>
         <button :disabled="actionLoading['exportTrades:json']" @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> {{ actionLoading['exportTrades:json'] ? 'Exporting...' : 'Export JSON' }}</button>
-        <button :disabled="actionLoading.archiveAllClosed" @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> {{ actionLoading.archiveAllClosed ? 'Archiving...' : 'Archive all closed trades' }}</button>
-        <button :disabled="actionLoading.unarchiveAll" @click="unarchiveAll"><i class="fa-solid fa-rotate-left"></i> {{ actionLoading.unarchiveAll ? 'Restoring...' : 'Unarchive all' }}</button>
-        <button class="button-danger" :disabled="actionLoading.deleteAllArchivedTrades" @click="deleteAllArchivedTrades"><i class="fa-solid fa-trash"></i> {{ actionLoading.deleteAllArchivedTrades ? 'Deleting...' : 'Delete all archived trades' }}</button>
+      </div>
+      <details class="history-tools"><summary>{{ $t('Archive management') }}</summary><div class="action-row">
+        <button :disabled="actionLoading.archiveAllClosed" @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> {{ $t(actionLoading.archiveAllClosed ? 'Archiving...' : 'Archive all closed trades') }}</button>
+        <button :disabled="actionLoading.unarchiveAll" @click="unarchiveAll"><i class="fa-solid fa-rotate-left"></i> {{ $t(actionLoading.unarchiveAll ? 'Restoring...' : 'Unarchive all') }}</button>
+        <button class="button-danger" :disabled="actionLoading.deleteAllArchivedTrades" @click="deleteAllArchivedTrades"><i class="fa-solid fa-trash"></i> {{ $t(actionLoading.deleteAllArchivedTrades ? 'Deleting...' : 'Delete all archived trades') }}</button>
       </div>
       <div class="metric-grid">
-        <div><span>Archived trades</span><strong>{{ metrics?.archived_trades_count ?? 0 }}</strong></div>
-        <div><span>Archived PnL</span><strong>{{ fmt(metrics?.archived_pnl, 2) }} USDT</strong></div>
-        <div><span>Gross profit</span><strong>{{ fmt(metrics?.gross_profit, 2) }} USDT</strong></div>
-        <div><span>Gross loss</span><strong>{{ fmt(metrics?.gross_loss, 2) }} USDT</strong></div>
+        <div><span>{{ $t("Archived trades") }}</span><strong>{{ metrics?.archived_trades_count ?? 0 }}</strong></div>
+        <div><span>{{ $t("Archived PnL") }}</span><strong>{{ fmt(metrics?.archived_pnl, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Gross profit") }}</span><strong>{{ fmt(metrics?.gross_profit, 2) }}{{ $t("USDT") }}</strong></div>
+        <div><span>{{ $t("Gross loss") }}</span><strong>{{ fmt(metrics?.gross_loss, 2) }}{{ $t("USDT") }}</strong></div>
       </div>
+      </details>
       <div class="recovery-table">
-        <div class="recovery-row recovery-row--head recovery-row--trades"><span>ID</span><span>Mode</span><span>Side</span><span>Step</span><span>Margin</span><span>Entry</span><span>Exit</span><span>PnL</span><span>Result</span><span>Live</span><span>Protection</span><span>Action</span></div>
-        <div class="recovery-row recovery-row--trades" v-for="trade in trades" :key="trade.id">
+        <div class="recovery-row recovery-row--head recovery-row--trades"><span>{{ $t("ID") }}</span><span>{{ $t("Mode") }}</span><span>{{ $t("Side") }}</span><span>{{ $t("Step") }}</span><span>{{ $t("Margin") }}</span><span>{{ $t("Entry") }}</span><span>{{ $t("Exit") }}</span><span>{{ $t("PnL") }}</span><span>{{ $t("Result") }}</span><span>{{ $t("Live") }}</span><span>{{ $t("Protection") }}</span><span>{{ $t("Action") }}</span></div>
+        <div class="empty-row" v-if="!visibleTrades.length">{{ $t('No trades in this mode') }}</div>
+        <div class="recovery-row recovery-row--trades" v-for="trade in visibleTrades" :key="trade.id">
           <span data-label="ID">#{{ trade.id }}</span>
           <span data-label="Mode"><span :class="['mode-badge', String(trade.execution_mode || 'paper').toLowerCase() === 'live' ? 'live' : 'paper']">{{ trade.execution_mode || 'paper' }}</span></span>
           <span data-label="Side"><span :class="['side-badge', String(trade.side || '').toLowerCase()]">{{ trade.side }}</span></span>
@@ -1293,58 +1358,67 @@ export default {
           <span data-label="Exit">{{ fmt(trade.exit_price, 4) }}</span>
           <span data-label="PnL" :class="['pnl-badge', resultTone(trade)]">
             <strong>{{ moneyResult(trade.pnl) }}</strong>
-            <small>{{ feeIndicator(trade) || resultLabel(trade) }}</small>
+            <small>{{ $t(pnlEvidence(trade)) }}</small>
           </span>
-          <span data-label="Result"><span :class="['status-badge', resultTone(trade)]">{{ resultLabel(trade) }}</span></span>
-          <span data-label="Live"><span :class="['status-badge', liveStatusTone(trade.live_status)]">{{ formatLiveStatus(trade.live_status) }}</span></span>
-          <span data-label="Protection"><span :class="['status-badge', protectionTone(trade)]">{{ formatProtectionStatus(trade) }}</span></span>
+          <span data-label="Result"><span :class="['status-badge', resultTone(trade)]">{{ $t(resultLabel(trade)) }}</span></span>
+          <span data-label="Live"><span :class="['status-badge', liveStatusTone(trade.live_status)]">{{ $t(formatLiveStatus(trade.live_status)) }}</span></span>
+          <span data-label="Protection"><span :class="['status-badge', protectionTone(trade)]">{{ $t(formatProtectionStatus(trade)) }}</span></span>
           <span class="trade-actions" data-label="Action">
-            <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ formatWarningSummary(trade) }}</span>
-            <button @click="viewDetails(trade)">View Details</button>
-            <button v-if="trade.closed_at && !trade.is_archived" :disabled="actionLoading[`archiveTrade:${trade.id}`]" @click="archiveTrade(trade)">Archive</button>
-            <button v-if="trade.is_archived" class="button-danger" :disabled="actionLoading[`deleteArchivedTrade:${trade.id}`]" @click="deleteArchivedTrade(trade)">Delete</button>
+            <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ $t(formatWarningSummary(trade)) }}</span>
+            <button @click="viewDetails(trade)">{{ $t("View Details") }}</button>
+            <button v-if="trade.closed_at && !trade.is_archived" :disabled="actionLoading[`archiveTrade:${trade.id}`]" @click="archiveTrade(trade)">{{ $t("Archive") }}</button>
+            <button v-if="trade.is_archived" class="button-danger" :disabled="actionLoading[`deleteArchivedTrade:${trade.id}`]" @click="deleteArchivedTrade(trade)">{{ $t("Delete") }}</button>
           </span>
         </div>
       </div>
     </section>
 
+    <div class="details-backdrop" v-if="reviewOpen" @click.self="reviewOpen = false" @keydown.esc="reviewOpen = false">
+      <div class="details-modal" v-dialog-focus="() => reviewOpen = false" :aria-label="$t('Review before saving')">
+        <div class="details-header"><h3>{{ $t('Review before saving') }}</h3><button autofocus @click="reviewOpen = false">{{ $t('Cancel') }}</button></div>
+        <p>{{ form.exchange }} · {{ form.symbol }} · {{ form.execution_mode }}</p>
+        <p>{{ $t('Estimated notional') }}: {{ fmt(Number(form.base_margin_usdt) * Number(form.leverage), 2) }}{{ $t("USDT") }}</p>
+        <table class="review-table"><thead><tr><th>{{ $t('Field') }}</th><th>{{ $t('Current') }}</th><th>{{ $t('Proposed') }}</th></tr></thead><tbody><tr v-for="change in reviewedChanges" :key="change.key"><td>{{ change.key }}</td><td>{{ String(change.before ?? '—') }}</td><td>{{ String(change.after ?? '—') }}</td></tr></tbody></table>
+        <div class="action-row"><button class="primary-button" :disabled="actionLoading.saveConfig" @click="saveConfig">{{ $t('Save changes') }}</button><button @click="reviewOpen = false">{{ $t('Cancel') }}</button></div>
+      </div>
+    </div>
     <div class="details-backdrop" v-if="mlExplorerDetail" @click.self="closeMlExplorerDetail">
-      <div class="details-modal">
+      <div class="details-modal" v-dialog-focus="closeMlExplorerDetail" :aria-label="$t('ML Dataset Details')">
         <div class="details-header">
           <div>
-            <h3>ML Dataset Details</h3>
+            <h3>{{ $t("ML Dataset Details") }}</h3>
             <p>{{ mlExplorerDetail.dataset.replaceAll('_', ' ') }} #{{ mlExplorerDetail.item?.id }}</p>
           </div>
           <div class="action-row">
-            <button @click="copyMlExplorerJson"><i class="fa-solid fa-copy"></i> Copy JSON</button>
+            <button @click="copyMlExplorerJson"><i class="fa-solid fa-copy"></i>{{ $t("Copy JSON") }}</button>
             <button @click="closeMlExplorerDetail"><i class="fa-solid fa-xmark"></i></button>
           </div>
         </div>
-        <div class="debug-warning" v-if="mlExplorerDetailLoading">Loading record details...</div>
+        <div class="debug-warning" v-if="mlExplorerDetailLoading">{{ $t("Loading record details...") }}</div>
         <div class="debug-warning detail-error-row" v-if="mlExplorerDetailError">
           <span>{{ mlExplorerDetailError }}</span>
-          <button @click="retryMlExplorerDetail"><i class="fa-solid fa-rotate-right"></i> Retry</button>
+          <button @click="retryMlExplorerDetail"><i class="fa-solid fa-rotate-right"></i>{{ $t("Retry") }}</button>
         </div>
         <div class="details-section">
-          <h4>Main fields</h4>
+          <h4>{{ $t("Main fields") }}</h4>
           <div class="metric-grid">
-            <div><span>ID</span><strong>{{ mlExplorerDetail.item?.id }}</strong></div>
-            <div><span>Exchange</span><strong>{{ mlExplorerDetail.item?.exchange || '-' }}</strong></div>
-            <div><span>Symbol</span><strong>{{ mlExplorerDetail.item?.symbol || '-' }}</strong></div>
-            <div><span>Timestamp</span><strong>{{ dt(mlExplorerDetail.item?.timestamp || mlExplorerDetail.item?.created_at) }}</strong></div>
-            <div v-if="mlExplorerDetail.item?.label_status"><span>Label status</span><strong>{{ mlExplorerDetail.item.label_status }}</strong></div>
-            <div v-if="mlExplorerDetail.item?.result"><span>Result</span><strong>{{ mlExplorerDetail.item.result }}</strong></div>
-            <div v-if="mlExplorerDetail.item?.ml_score !== undefined"><span>ML score</span><strong>{{ mlExplorerDetail.item.ml_score ?? '-' }}</strong></div>
-            <div v-if="mlExplorerDetail.item?.reference_price !== undefined"><span>Reference price</span><strong>{{ fmt(mlExplorerDetail.item.reference_price, 6) }}</strong></div>
-            <div v-if="mlExplorerDetail.item?.mid_price !== undefined"><span>Mid price</span><strong>{{ fmt(mlExplorerDetail.item.mid_price, 6) }}</strong></div>
+            <div><span>{{ $t("ID") }}</span><strong>{{ mlExplorerDetail.item?.id }}</strong></div>
+            <div><span>{{ $t("Exchange") }}</span><strong>{{ mlExplorerDetail.item?.exchange || '-' }}</strong></div>
+            <div><span>{{ $t("Symbol") }}</span><strong>{{ mlExplorerDetail.item?.symbol || '-' }}</strong></div>
+            <div><span>{{ $t("Timestamp") }}</span><strong>{{ dt(mlExplorerDetail.item?.timestamp || mlExplorerDetail.item?.created_at) }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.label_status"><span>{{ $t("Label status") }}</span><strong>{{ mlExplorerDetail.item.label_status }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.result"><span>{{ $t("Result") }}</span><strong>{{ mlExplorerDetail.item.result }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.ml_score !== undefined"><span>{{ $t("ML score") }}</span><strong>{{ mlExplorerDetail.item.ml_score ?? '-' }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.reference_price !== undefined"><span>{{ $t("Reference price") }}</span><strong>{{ fmt(mlExplorerDetail.item.reference_price, 6) }}</strong></div>
+            <div v-if="mlExplorerDetail.item?.mid_price !== undefined"><span>{{ $t("Mid price") }}</span><strong>{{ fmt(mlExplorerDetail.item.mid_price, 6) }}</strong></div>
           </div>
         </div>
         <div class="details-section" v-if="mlExplorerDetail.dataset === 'market' || mlExplorerDetail.dataset === 'exchange_label'">
-          <h4>Future Returns & MFE/MAE</h4>
+          <h4>{{ $t("Future Returns & MFE/MAE") }}</h4>
           <div class="recovery-table">
-            <div class="recovery-row recovery-row--head recovery-row--details"><span>Horizon</span><span>Future</span><span>Return</span><span>Max</span><span>Min</span><span>MFE long</span><span>MAE long</span><span>MFE short</span><span>MAE short</span></div>
+            <div class="recovery-row recovery-row--head recovery-row--details"><span>{{ $t("Horizon") }}</span><span>{{ $t("Future") }}</span><span>{{ $t("Return") }}</span><span>{{ $t("Max") }}</span><span>{{ $t("Min") }}</span><span>{{ $t("MFE long") }}</span><span>{{ $t("MAE long") }}</span><span>{{ $t("MFE short") }}</span><span>{{ $t("MAE short") }}</span></div>
             <div class="recovery-row recovery-row--details" v-for="horizon in [10, 30, 60]" :key="horizon">
-              <span>{{ horizon }}s</span>
+              <span>{{ horizon }}{{ $t("s") }}</span>
               <span>{{ fmt(mlExplorerDetail.item?.[`future_price_${horizon}s`], 6) }}</span>
               <span>{{ fmt(mlExplorerDetail.item?.[`future_return_${horizon}s`], 6) }}</span>
               <span>{{ fmt(mlExplorerDetail.item?.[`max_price_${horizon}s`], 6) }}</span>
@@ -1357,9 +1431,9 @@ export default {
           </div>
         </div>
         <div class="details-section" v-if="mlExplorerDetail.item?.exchange_labels?.length">
-          <h4>Exchange Labels</h4>
+          <h4>{{ $t("Exchange Labels") }}</h4>
           <div class="recovery-table">
-            <div class="recovery-row recovery-row--head recovery-row--details"><span>Exchange</span><span>Symbol</span><span>Status</span><span>Ref</span><span>10s return</span><span>30s return</span><span>60s return</span></div>
+            <div class="recovery-row recovery-row--head recovery-row--details"><span>{{ $t("Exchange") }}</span><span>{{ $t("Symbol") }}</span><span>{{ $t("Status") }}</span><span>{{ $t("Ref") }}</span><span>{{ $t("10s return") }}</span><span>{{ $t("30s return") }}</span><span>{{ $t("60s return") }}</span></div>
             <div class="recovery-row recovery-row--details" v-for="label in mlExplorerDetail.item.exchange_labels" :key="label.id">
               <span>{{ label.exchange }}</span>
               <span>{{ label.symbol }}</span>
@@ -1372,162 +1446,167 @@ export default {
           </div>
         </div>
         <div class="details-section">
-          <h4>Raw JSON</h4>
+          <h4>{{ $t("Raw JSON") }}</h4>
           <pre class="raw-block">{{ JSON.stringify(mlExplorerDetail.item, null, 2) }}</pre>
         </div>
       </div>
     </div>
 
     <div class="details-backdrop" v-if="decisionDetails" @click.self="closeDetails">
-      <div class="details-modal">
+      <div class="details-modal" v-dialog-focus="closeDetails" :aria-label="$t('Decision Snapshot')">
         <div class="section-title">
-          <h3>Decision Snapshot</h3>
-          <button @click="closeDetails">Close</button>
+          <h3>{{ $t("Decision Snapshot") }}</h3>
+          <button @click="closeDetails">{{ $t("Close") }}</button>
         </div>
 
         <div class="detail-block">
-          <h4>Trade summary</h4>
+          <h4>{{ $t("Trade summary") }}</h4>
           <div class="metric-grid">
-            <div><span>Trade</span><strong>#{{ detail('summary.id') }}</strong></div>
-            <div><span>Mode</span><strong>{{ detail('trade.execution_mode', 'paper') }}</strong></div>
-            <div><span>Side</span><strong>{{ detail('summary.side') }}</strong></div>
-            <div><span>Exchange</span><strong>{{ detail('summary.exchange') }}</strong></div>
-            <div><span>Symbol</span><strong>{{ detail('summary.symbol') }}</strong></div>
-            <div><span>Step</span><strong>{{ detail('trade.recovery_step') }}</strong></div>
-            <div><span>Margin</span><strong>{{ fmt(detail('trade.margin', 0), 2) }} USDT</strong></div>
-            <div><span>Notional</span><strong>{{ fmt(detail('trade.notional', 0), 2) }} USDT</strong></div>
-            <div><span>Opened at</span><strong>{{ dt(detail('trade.opened_at')) }}</strong></div>
-            <div><span>Closed at</span><strong>{{ dt(detail('trade.closed_at')) }}</strong></div>
-            <div><span>Close reason</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
+            <div><span>{{ $t("Trade") }}</span><strong>#{{ detail('summary.id') }}</strong></div>
+            <div><span>{{ $t("Mode") }}</span><strong>{{ detail('trade.execution_mode', 'paper') }}</strong></div>
+            <div><span>{{ $t("Side") }}</span><strong>{{ detail('summary.side') }}</strong></div>
+            <div><span>{{ $t("Exchange") }}</span><strong>{{ detail('summary.exchange') }}</strong></div>
+            <div><span>{{ $t("Symbol") }}</span><strong>{{ detail('summary.symbol') }}</strong></div>
+            <div><span>{{ $t("Step") }}</span><strong>{{ detail('trade.recovery_step') }}</strong></div>
+            <div><span>{{ $t("Margin") }}</span><strong>{{ fmt(detail('trade.margin', 0), 2) }}{{ $t("USDT") }}</strong></div>
+            <div><span>{{ $t("Notional") }}</span><strong>{{ fmt(detail('trade.notional', 0), 2) }}{{ $t("USDT") }}</strong></div>
+            <div><span>{{ $t("Opened at") }}</span><strong>{{ dt(detail('trade.opened_at')) }}</strong></div>
+            <div><span>{{ $t("Closed at") }}</span><strong>{{ dt(detail('trade.closed_at')) }}</strong></div>
+            <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Execution</h4>
+          <h4>{{ $t("Execution") }}</h4>
           <div class="metric-grid">
-            <div><span>Live status</span><strong>{{ formatLiveStatus(detail('trade.live_status')) }}</strong></div>
-            <div><span>Entry</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
-            <div><span>Exit</span><strong>{{ fmt(detail('trade.exit_price', 0), 6) }}</strong></div>
-            <div><span>Filled amount</span><strong>{{ fmt(detail('trade.live_filled_amount', 0), 8) }}</strong></div>
-            <div><span>Open order ID</span><strong>{{ formatOrderId(detail('trade.live_exchange_order_id')) }}</strong></div>
-            <div><span>Close order ID</span><strong>{{ formatOrderId(detail('trade.live_close_order_id')) }}</strong></div>
-            <div><span>Live error</span><strong>{{ detail('trade.live_error') || '-' }}</strong></div>
+            <div><span>{{ $t("Live status") }}</span><strong>{{ formatLiveStatus(detail('trade.live_status')) }}</strong></div>
+            <div><span>{{ $t("Entry") }}</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
+            <div><span>{{ $t("Exit") }}</span><strong>{{ fmt(detail('trade.exit_price', 0), 6) }}</strong></div>
+            <div><span>{{ $t("Filled amount") }}</span><strong>{{ fmt(detail('trade.live_filled_amount', 0), 8) }}</strong></div>
+            <div><span>{{ $t("Open order ID") }}</span><strong>{{ formatOrderId(detail('trade.live_exchange_order_id')) }}</strong></div>
+            <div><span>{{ $t("Close order ID") }}</span><strong>{{ formatOrderId(detail('trade.live_close_order_id')) }}</strong></div>
+            <div><span>{{ $t("Live error") }}</span><strong>{{ detail('trade.live_error') || '-' }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>TP/SL protection</h4>
+          <h4>{{ $t("TP/SL protection") }}</h4>
           <div class="metric-grid">
-            <div><span>Status</span><strong>{{ detail('trade.tp_sl_protected') ? 'Protected' : 'Exchange TP/SL not created' }}</strong></div>
-            <div><span>TP price</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
-            <div><span>SL price</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
-            <div><span>TP order ID</span><strong>{{ formatOrderId(detail('trade.exchange_tp_order_id')) }}</strong></div>
-            <div><span>SL order ID</span><strong>{{ formatOrderId(detail('trade.exchange_sl_order_id')) }}</strong></div>
-            <div><span>Created at</span><strong>{{ dt(detail('trade.tp_sl_created_at')) }}</strong></div>
-            <div><span>TP/SL error</span><strong>{{ detail('trade.tp_sl_error') || '-' }}</strong></div>
+            <div><span>{{ $t("Status") }}</span><strong>{{ $t(formatProtectionStatus(detail('trade', {}))) }}</strong></div>
+            <div><span>{{ $t('Last protection check') }}</span><strong>{{ dt(detail('trade.protection_checked_at', null)) }}</strong></div>
+            <div><span>{{ $t('Protection expiry') }}</span><strong>{{ dt(detail('trade.protection_expires_at', null)) }}</strong></div>
+            <div><span>{{ $t("TP price") }}</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
+            <div><span>{{ $t("SL price") }}</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
+            <div><span>{{ $t("TP order ID") }}</span><strong>{{ formatOrderId(detail('trade.exchange_tp_order_id')) }}</strong></div>
+            <div><span>{{ $t("SL order ID") }}</span><strong>{{ formatOrderId(detail('trade.exchange_sl_order_id')) }}</strong></div>
+            <div><span>{{ $t("Created at") }}</span><strong>{{ dt(detail('trade.tp_sl_created_at')) }}</strong></div>
+            <div><span>{{ $t("TP/SL error") }}</span><strong>{{ detail('trade.tp_sl_error') || '-' }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>PnL & fees</h4>
+          <h4>{{ $t("PnL & fees") }}</h4>
           <div class="metric-grid">
-            <div><span>PnL</span><strong>{{ moneyResult(detail('summary.pnl', 0)) }}</strong></div>
-            <div><span>Gross PnL</span><strong>{{ moneyResult(detail('trade.gross_pnl', detail('summary.pnl', 0))) }}</strong></div>
-            <div><span>Net PnL</span><strong>{{ moneyResult(detail('trade.net_pnl', detail('summary.pnl', 0))) }}</strong></div>
-            <div><span>Total fees</span><strong>{{ fmt(detail('trade.total_fee', 0), 6) }} USDT</strong></div>
-            <div><span>Entry fee</span><strong>{{ fmt(detail('trade.live_entry_fee', 0), 6) }} USDT</strong></div>
-            <div><span>Exit fee</span><strong>{{ fmt(detail('trade.live_exit_fee', 0), 6) }} USDT</strong></div>
-            <div><span>Fee status</span><strong>{{ feeIndicator(detail('trade', {})) || '-' }}</strong></div>
-            <div><span>PnL source</span><strong>{{ detail('trade.pnl_source') || '-' }}</strong></div>
+            <div><span>{{ $t("PnL") }}</span><strong>{{ moneyResult(detail('summary.pnl', null)) }}</strong></div>
+            <div><span>{{ $t("Gross PnL") }}</span><strong>{{ moneyResult(detail('trade.gross_pnl', null)) }}</strong></div>
+            <div><span>{{ $t("Net PnL") }}</span><strong>{{ moneyResult(detail('trade.net_pnl', null)) }}</strong></div>
+            <div><span>{{ $t("Total fees") }}</span><strong>{{ fmt(detail('trade.total_fee', null), 6) }} USDT</strong></div>
+            <div><span>{{ $t("Entry fee") }}</span><strong>{{ fmt(detail('trade.live_entry_fee', null), 6) }} USDT</strong></div>
+            <div><span>{{ $t("Exit fee") }}</span><strong>{{ fmt(detail('trade.live_exit_fee', null), 6) }} USDT</strong></div>
+            <div><span>{{ $t('Funding PnL') }}</span><strong>{{ fmt(detail('trade.funding_pnl', null), 6) }} USDT</strong></div>
+            <div><span>{{ $t('Funding status') }}</span><strong>{{ detail('trade.funding_status') }}</strong></div>
+            <div><span>{{ $t("Fee status") }}</span><strong>{{ feeIndicator(detail('trade', {})) || '-' }}</strong></div>
+            <div><span>{{ $t("PnL source") }}</span><strong>{{ detail('trade.pnl_source') || '-' }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Reconciliation</h4>
+          <h4>{{ $t("Reconciliation") }}</h4>
           <div class="metric-grid">
-            <div><span>Close reason</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
-            <div><span>Exit fallback used</span><strong>{{ detail('trade.exit_price_fallback_used') ? 'Yes' : 'No' }}</strong></div>
-            <div><span>Exit warning</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
+            <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
+            <div><span>{{ $t("Exit fallback used") }}</span><strong>{{ detail('trade.exit_price_fallback_used') ? 'Yes' : 'No' }}</strong></div>
+            <div><span>{{ $t("Exit warning") }}</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
+            <div><span>{{ $t('Legacy reconciliation') }}</span><strong>{{ detail('trade.legacy_reconciliation_status') || '-' }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Signal</h4>
+          <h4>{{ $t("Signal") }}</h4>
           <div class="metric-grid">
-            <div><span>Entry reason</span><strong>{{ detail('signal.entry_reason') }}</strong></div>
-            <div><span>Current step</span><strong>{{ detail('decision_snapshot.current_recovery_step') }}</strong></div>
-            <div><span>Margin</span><strong>{{ fmt(detail('decision_snapshot.current_margin', 0), 2) }}</strong></div>
-            <div><span>Notional</span><strong>{{ fmt(detail('decision_snapshot.current_notional', 0), 2) }}</strong></div>
-            <div><span>TP target PnL</span><strong>{{ fmt(detail('decision_snapshot.take_profit_target_pnl', 0), 4) }}</strong></div>
-            <div><span>SL target PnL</span><strong>{{ fmt(detail('decision_snapshot.stop_loss_target_pnl', 0), 4) }}</strong></div>
+            <div><span>{{ $t("Entry reason") }}</span><strong>{{ detail('signal.entry_reason') }}</strong></div>
+            <div><span>{{ $t("Current step") }}</span><strong>{{ detail('decision_snapshot.current_recovery_step') }}</strong></div>
+            <div><span>{{ $t("Margin") }}</span><strong>{{ fmt(detail('decision_snapshot.current_margin', 0), 2) }}</strong></div>
+            <div><span>{{ $t("Notional") }}</span><strong>{{ fmt(detail('decision_snapshot.current_notional', 0), 2) }}</strong></div>
+            <div><span>{{ $t("TP target PnL") }}</span><strong>{{ fmt(detail('decision_snapshot.take_profit_target_pnl', 0), 4) }}</strong></div>
+            <div><span>{{ $t("SL target PnL") }}</span><strong>{{ fmt(detail('decision_snapshot.stop_loss_target_pnl', 0), 4) }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Consensus</h4>
+          <h4>{{ $t("Consensus") }}</h4>
           <div class="metric-grid">
-            <div><span>Direction</span><strong>{{ detail('consensus.direction') }}</strong></div>
-            <div><span>Valid exchanges</span><strong>{{ detail('consensus.valid_exchanges_count') }}</strong></div>
-            <div><span>Long confirms</span><strong>{{ detail('consensus.confirming_long_count') }}</strong></div>
-            <div><span>Short confirms</span><strong>{{ detail('consensus.confirming_short_count') }}</strong></div>
-            <div><span>Long ratio</span><strong>{{ fmt(detail('consensus.consensus_ratio_long', 0), 3) }}</strong></div>
-            <div><span>Short ratio</span><strong>{{ fmt(detail('consensus.consensus_ratio_short', 0), 3) }}</strong></div>
-            <div><span>Median imbalance</span><strong>{{ fmt(detail('consensus.median_imbalance', 0), 4) }}</strong></div>
-            <div><span>Raw avg imbalance</span><strong>{{ fmt(detail('consensus.raw_average_imbalance', 0), 4) }}</strong></div>
-            <div><span>Avg imbalance</span><strong>{{ fmt(detail('consensus.average_imbalance', 0), 4) }}</strong></div>
-            <div><span>Avg momentum</span><strong>{{ fmt(detail('consensus.average_momentum', 0), 8) }}</strong></div>
-            <div><span>Anomalies</span><strong>{{ detail('consensus.anomalous_exchanges_count') }}</strong></div>
-            <div><span>Excluded</span><strong>{{ (detail('consensus.excluded_anomalous_imbalance_exchanges') || []).join(', ') || '-' }}</strong></div>
+            <div><span>{{ $t("Direction") }}</span><strong>{{ detail('consensus.direction') }}</strong></div>
+            <div><span>{{ $t("Valid exchanges") }}</span><strong>{{ detail('consensus.valid_exchanges_count') }}</strong></div>
+            <div><span>{{ $t("Long confirms") }}</span><strong>{{ detail('consensus.confirming_long_count') }}</strong></div>
+            <div><span>{{ $t("Short confirms") }}</span><strong>{{ detail('consensus.confirming_short_count') }}</strong></div>
+            <div><span>{{ $t("Long ratio") }}</span><strong>{{ fmt(detail('consensus.consensus_ratio_long', 0), 3) }}</strong></div>
+            <div><span>{{ $t("Short ratio") }}</span><strong>{{ fmt(detail('consensus.consensus_ratio_short', 0), 3) }}</strong></div>
+            <div><span>{{ $t("Median imbalance") }}</span><strong>{{ fmt(detail('consensus.median_imbalance', 0), 4) }}</strong></div>
+            <div><span>{{ $t("Raw avg imbalance") }}</span><strong>{{ fmt(detail('consensus.raw_average_imbalance', 0), 4) }}</strong></div>
+            <div><span>{{ $t("Avg imbalance") }}</span><strong>{{ fmt(detail('consensus.average_imbalance', 0), 4) }}</strong></div>
+            <div><span>{{ $t("Avg momentum") }}</span><strong>{{ fmt(detail('consensus.average_momentum', 0), 8) }}</strong></div>
+            <div><span>{{ $t("Anomalies") }}</span><strong>{{ detail('consensus.anomalous_exchanges_count') }}</strong></div>
+            <div><span>{{ $t("Excluded") }}</span><strong>{{ listText(detail('consensus.excluded_anomalous_imbalance_exchanges', [])) }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Feedback</h4>
+          <h4>{{ $t("Feedback") }}</h4>
           <div class="metric-grid">
-            <div><span>Enabled</span><strong>{{ detail('feedback.feedback_enabled') }}</strong></div>
-            <div><span>Long win rate</span><strong>{{ fmt(detail('feedback.long_recent_win_rate', 0), 2) }}%</strong></div>
-            <div><span>Short win rate</span><strong>{{ fmt(detail('feedback.short_recent_win_rate', 0), 2) }}%</strong></div>
-            <div><span>Blocked side</span><strong>{{ detail('feedback.blocked_side') }}</strong></div>
-            <div><span>Reject reason</span><strong>{{ detail('feedback.feedback_reject_reason') }}</strong></div>
+            <div><span>{{ $t("Enabled") }}</span><strong>{{ detail('feedback.feedback_enabled') }}</strong></div>
+            <div><span>{{ $t("Long win rate") }}</span><strong>{{ fmt(detail('feedback.long_recent_win_rate', 0), 2) }}%</strong></div>
+            <div><span>{{ $t("Short win rate") }}</span><strong>{{ fmt(detail('feedback.short_recent_win_rate', 0), 2) }}%</strong></div>
+            <div><span>{{ $t("Blocked side") }}</span><strong>{{ detail('feedback.blocked_side') }}</strong></div>
+            <div><span>{{ $t("Reject reason") }}</span><strong>{{ detail('feedback.feedback_reject_reason') }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Risk</h4>
+          <h4>{{ $t("Risk") }}</h4>
           <div class="metric-grid">
-            <div><span>Approved</span><strong>{{ detail('risk.approved') }}</strong></div>
-            <div><span>Reason</span><strong>{{ detail('risk.reason') }}</strong></div>
+            <div><span>{{ $t("Approved") }}</span><strong>{{ detail('risk.approved') }}</strong></div>
+            <div><span>{{ $t("Reason") }}</span><strong>{{ detail('risk.reason') }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>ML Shadow</h4>
+          <h4>{{ $t("ML Shadow") }}</h4>
           <div class="metric-grid">
-            <div><span>Score</span><strong>{{ detail('ml.ml_score') }}</strong></div>
-            <div><span>Decision</span><strong>{{ detail('ml.ml_decision') }}</strong></div>
-            <div><span>Reason</span><strong>{{ detail('ml.ml_reason') }}</strong></div>
-            <div><span>Model version</span><strong>{{ detail('ml.ml_model_version') }}</strong></div>
-            <div><span>Evaluation</span><strong>{{ detail('ml.evaluation_id') }}</strong></div>
-            <div><span>Snapshot at</span><strong>{{ dt(detail('ml.timestamp')) }}</strong></div>
+            <div><span>{{ $t("Score") }}</span><strong>{{ detail('ml.ml_score') }}</strong></div>
+            <div><span>{{ $t("Decision") }}</span><strong>{{ detail('ml.ml_decision') }}</strong></div>
+            <div><span>{{ $t("Reason") }}</span><strong>{{ detail('ml.ml_reason') }}</strong></div>
+            <div><span>{{ $t("Model version") }}</span><strong>{{ detail('ml.ml_model_version') }}</strong></div>
+            <div><span>{{ $t("Evaluation") }}</span><strong>{{ detail('ml.evaluation_id') }}</strong></div>
+            <div><span>{{ $t("Snapshot at") }}</span><strong>{{ dt(detail('ml.timestamp')) }}</strong></div>
           </div>
         </div>
 
         <div class="detail-block">
-          <h4>Raw exchange responses</h4>
+          <h4>{{ $t("Raw exchange responses") }}</h4>
           <details class="raw-details">
-            <summary>Open response</summary>
+            <summary>{{ $t("Open response") }}</summary>
             <pre class="raw-block">{{ prettyRaw(detail('trade.live_raw_open_response_json', null)) }}</pre>
           </details>
           <details class="raw-details">
-            <summary>Close response</summary>
+            <summary>{{ $t("Close response") }}</summary>
             <pre class="raw-block">{{ prettyRaw(detail('trade.live_raw_close_response_json', null)) }}</pre>
           </details>
         </div>
 
         <div class="detail-block">
-          <h4>Per-exchange order book</h4>
+          <h4>{{ $t("Per-exchange order book") }}</h4>
           <div class="recovery-table">
-            <div class="recovery-row recovery-row--details recovery-row--head"><span>Exchange</span><span>Symbol</span><span>Bid top 5</span><span>Ask top 5</span><span>Imbalance</span><span>Raw</span><span>Anomaly</span><span>Spread %</span><span>Momentum</span><span>Age</span><span>Valid</span><span>Long</span><span>Short</span><span>Reject</span></div>
+            <div class="recovery-row recovery-row--details recovery-row--head"><span>{{ $t("Exchange") }}</span><span>{{ $t("Symbol") }}</span><span>{{ $t("Bid top 5") }}</span><span>{{ $t("Ask top 5") }}</span><span>{{ $t("Imbalance") }}</span><span>{{ $t("Raw") }}</span><span>{{ $t("Anomaly") }}</span><span>{{ $t("Spread %") }}</span><span>{{ $t("Momentum") }}</span><span>{{ $t("Age") }}</span><span>{{ $t("Valid") }}</span><span>{{ $t("Long") }}</span><span>{{ $t("Short") }}</span><span>{{ $t("Reject") }}</span></div>
             <div class="recovery-row recovery-row--details" v-for="row in decisionDetails.per_exchange_features" :key="`${row.exchange}-${row.symbol}`">
               <span>{{ row.exchange }}</span>
               <span>{{ row.symbol }}</span>

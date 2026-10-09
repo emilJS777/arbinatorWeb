@@ -16,8 +16,14 @@ dom.watch();
 
 import emitter from '@/plugins/eventBus';
 import WebSocketPlugin from './plugins/webSocket.js';
+import locale from './plugins/locale.js';
+import dialogFocus from './plugins/dialogFocus.js';
+import theme from './plugins/theme.js';
 
 const app = createApp(App)
+app.use(locale)
+app.use(theme)
+app.directive('dialog-focus', dialogFocus)
 app.config.warnHandler = () => {};
 app.config.globalProperties.emitter = emitter;
 app.use(vuetify)

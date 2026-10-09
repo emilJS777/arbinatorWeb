@@ -22,6 +22,7 @@ export default {
         METRICS: null,
         DEBUG: null,
         ML_STATS: {
+            lastSuccessfulAt: null,
             ml_market_snapshots_count: 0,
             ml_market_snapshots_pending_count: 0,
             ml_market_snapshots_labeled_count: 0,
@@ -271,6 +272,7 @@ export default {
             if (isValidMlStats(payload)) {
                 state.ML_STATS = {
                     ...state.ML_STATS,
+                    lastSuccessfulAt: new Date().toISOString(),
                     ml_market_snapshots_count: Number(payload.ml_market_snapshots_count),
                     ml_market_snapshots_pending_count: Number(payload.ml_market_snapshots_pending_count),
                     ml_market_snapshots_labeled_count: Number(payload.ml_market_snapshots_labeled_count),
@@ -286,6 +288,7 @@ export default {
             if (isValidMlStats(payload)) {
                 state.ML_STATS = {
                     ...state.ML_STATS,
+                    lastSuccessfulAt: new Date().toISOString(),
                     ml_market_snapshots_count: Number(payload.ml_market_snapshots_count),
                     ml_market_snapshots_pending_count: Number(payload.ml_market_snapshots_pending_count),
                     ml_market_snapshots_labeled_count: Number(payload.ml_market_snapshots_labeled_count),
