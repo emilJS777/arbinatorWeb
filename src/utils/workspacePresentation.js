@@ -49,3 +49,22 @@ export function settingsChanges(before = {}, after = {}) {
 }
 
 export const canStartPaper = config => Boolean(config && config.execution_mode === 'paper' && config.exchange_id && config.trading_pair_id && !config.emergency_entry_block);
+
+export function startBlockReasons({config, runtime, dirty = false, loading = false} = {}) {
+  const reasons = [];
+  if (loading) reasons.push('Start request in progress');
+  if (!config) reasons.push('Saved configuration not loaded; refresh and check the API');
+  else {
+    if (config.execution_mode === 'live') reasons.push('Saved mode is LIVE; live activation is intentionally locked in this UI');
+    else if (config.execution_mode !== 'paper') reasons.push('Saved execution mode missing or unsupported; check frontend/backend versions');
+    if (!config.exchange_id) reasons.push('Saved exchange is missing; select and save an exchange');
+    if (!config.trading_pair_id) reasons.push('Saved trading pair is missing; select and save a pair');
+    if (config.emergency_entry_block) reasons.push('Emergency entry block is enabled in saved settings');
+  }
+  if (dirty) reasons.push('Unsaved settings; review and save before starting');
+  if (runtime?.enabled) reasons.push('Entries already enabled; Start is not required');
+  if (config && runtime?.config && ['execution_mode', 'exchange_id', 'trading_pair_id', 'emergency_entry_block'].some(key => config[key] !== runtime.config[key])) {
+    reasons.push('Saved config and last runtime state disagree; refresh before starting');
+  }
+  return reasons;
+}

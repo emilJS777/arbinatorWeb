@@ -1,6 +1,16 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Start request in progress': 'Запрос Start выполняется',
+  'Saved configuration not loaded; refresh and check the API': 'Сохранённая конфигурация не загружена; обновите данные и проверьте API',
+  'Saved mode is LIVE; live activation is intentionally locked in this UI': 'Сохранён режим LIVE; запуск live намеренно заблокирован в этом интерфейсе',
+  'Saved execution mode missing or unsupported; check frontend/backend versions': 'Сохранённый режим отсутствует или не поддерживается; проверьте версии frontend/backend',
+  'Saved exchange is missing; select and save an exchange': 'В сохранённой конфигурации нет exchange_id; выберите и сохраните биржу',
+  'Saved trading pair is missing; select and save a pair': 'В сохранённой конфигурации нет trading_pair_id; выберите и сохраните пару',
+  'Emergency entry block is enabled in saved settings': 'В сохранённых настройках включён аварийный запрет новых входов',
+  'Unsaved settings; review and save before starting': 'Есть несохранённые настройки; проверьте и сохраните их перед запуском',
+  'Entries already enabled; Start is not required': 'Входы уже включены; повторный Start не требуется',
+  'Saved config and last runtime state disagree; refresh before starting': 'Сохранённая конфигурация и последний state различаются; обновите данные перед запуском',
   'Current paper session only. Simulated PnL, not confirmed profit.': 'Только текущая paper-сессия. Симулированный PnL, не подтверждённая прибыль.',
   'Legacy paper results only. Simulated PnL.': 'Только paper-история до сессий. Симулированный PnL.',
   'Live ledger only. Verify fills, fees and reconciliation.': 'Только live-учёт. Проверяйте fills, комиссии и сверку с биржей.',

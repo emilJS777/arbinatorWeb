@@ -3,7 +3,7 @@ import {mapState} from "vuex";
 import {executionPreview} from '@/utils/executionPreview.js';
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
-import {canStartPaper, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
+import {startBlockReasons, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
 
 export default {
   computed: {
@@ -15,7 +15,8 @@ export default {
     executionPreview() { return executionPreview(this.form || {}); },
     section() { return this.$route.meta.workspaceSection || 'overview'; },
     pageTitle() { return sectionTitle(this.section); },
-    canStart() { return canStartPaper(this.statePayload?.config || this.config) && !this.formDirty; },
+    startBlockReasons() { return startBlockReasons({config: this.config, runtime: this.statePayload, dirty: this.formDirty, loading: this.actionLoading.start}); },
+    canStart() { return this.startBlockReasons.length === 0; },
     formDirty() {return this.form && this.savedForm && JSON.stringify(this.form) !== JSON.stringify(this.savedForm);},
     visibleTrades() {return (this.trades || []).filter(trade => this.historyMode === 'all' || (trade.execution_mode || 'paper') === this.historyMode);},
     reviewedChanges() {return settingsChanges(this.savedForm || {}, this.form || {});},
@@ -285,7 +286,7 @@ export default {
     },
     async start() {
       if (!this.canStart) {
-        this.emitter.emit('toster', {success: false, msg: this.formDirty ? 'Save settings before starting' : 'Live activation locked'});
+        this.emitter.emit('toster', {success: false, msg: this.startBlockReasons.map(reason => this.$t(reason)).join('; ')});
         return;
       }
       if (this.form) {
@@ -814,9 +815,13 @@ export default {
       <div><div class="workspace-eyebrow">{{ $t("ORDER FLOW / FUTURES") }}</div><h1>{{ $t(pageTitle) }}</h1><p>{{ $t("OrderBookRecovery") }}<span v-if="config"> · {{ $t('Saved configuration') }}: {{ config.exchange }} / {{ config.symbol }} · {{ (config.execution_mode || 'paper').toUpperCase() }}</span></p></div>
       <div class="action-row">
         <button :disabled="actionLoading.refresh" @click="runAction('refresh', load)"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>{{ $t('Refresh') }}</button>
-        <button v-if="section === 'overview'" class="primary-button" :disabled="!canStart || actionLoading.start || statePayload?.enabled" @click="start"><i class="fa-solid fa-play" aria-hidden="true"></i>{{ $t('Start paper entries') }}</button>
+        <button v-if="section === 'overview'" class="primary-button" :disabled="!canStart" aria-describedby="start-block-reasons" @click="start"><i class="fa-solid fa-play" aria-hidden="true"></i>{{ $t('Start paper entries') }}</button>
         <button v-if="section === 'overview'" :disabled="!config || actionLoading.stop" @click="stop"><i class="fa-solid fa-pause" aria-hidden="true"></i>{{ $t('Pause new entries') }}</button>
       </div>
+    </div>
+    <div v-if="section === 'overview'" id="start-block-reasons" role="status" aria-live="polite">
+      <ul v-if="startBlockReasons.length" class="workspace-notice"><li v-for="reason in startBlockReasons" :key="reason">{{ $t(reason) }}</li></ul>
+      <p>{{ $t('Saved configuration') }}: {{ config?.execution_mode || '—' }} · {{ $t('Runtime mode') }}: {{ statePayload?.config?.execution_mode || '—' }} · {{ $t('Unsaved draft') }}: {{ form?.execution_mode || '—' }}</p>
     </div>
     <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
     <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
