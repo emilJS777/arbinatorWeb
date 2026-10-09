@@ -1,11 +1,13 @@
 <script>
 import {mapState} from "vuex";
+import {executionPreview} from '@/utils/executionPreview.js';
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 import {canStartPaper, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
 
 export default {
   computed: {
+    executionPreview() { return executionPreview(this.form || {}); },
     section() { return this.$route.meta.workspaceSection || 'overview'; },
     pageTitle() { return sectionTitle(this.section); },
     canStart() { return canStartPaper(this.statePayload?.config || this.config) && !this.formDirty; },
@@ -795,7 +797,7 @@ export default {
 <template>
   <div class="recovery-page">
     <div class="workspace-page-heading">
-      <div><div class="workspace-eyebrow">{{ $t("ORDER FLOW / FUTURES") }}</div><h1>{{ $t(pageTitle) }}</h1><p>{{ $t("OrderBookRecovery") }}<span v-if="config"> · {{ config.exchange }} / {{ config.symbol }} · {{ (config.execution_mode || 'paper').toUpperCase() }}</span></p></div>
+      <div><div class="workspace-eyebrow">{{ $t("ORDER FLOW / FUTURES") }}</div><h1>{{ $t(pageTitle) }}</h1><p>{{ $t("OrderBookRecovery") }}<span v-if="config"> · {{ $t('Saved configuration') }}: {{ config.exchange }} / {{ config.symbol }} · {{ (config.execution_mode || 'paper').toUpperCase() }}</span></p></div>
       <div class="action-row">
         <button :disabled="actionLoading.refresh" @click="runAction('refresh', load)"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>{{ $t('Refresh') }}</button>
         <button v-if="section === 'overview'" class="primary-button" :disabled="!canStart || actionLoading.start || statePayload?.enabled" @click="start"><i class="fa-solid fa-play" aria-hidden="true"></i>{{ $t('Start paper entries') }}</button>
@@ -853,10 +855,25 @@ export default {
 
     <section class="recovery-section" v-if="form && section === 'settings'">
       <div class="section-title">
-        <h3>{{ $t('Execution') }}</h3>
+        <h3>{{ $t('Execution') }} · {{ $t(formDirty ? 'Unsaved draft' : 'Saved settings') }}</h3>
         <span :class="['mode-badge', form.execution_mode === 'live' ? 'live' : 'paper']">{{ (form.execution_mode || 'paper').toUpperCase() }}</span>
       </div>
       <div class="recovery-form">
+        <div class="workspace-notice neutral config-group-title">
+          {{ $t('Runtime mode') }}: {{ statePayload?.config?.execution_mode?.toUpperCase() || $t('Unknown') }} ·
+          {{ $t('Open position mode') }}: {{ openPosition?.execution_mode?.toUpperCase() || $t('No open position') }}.
+          {{ $t('Editing this form does not switch the running bot or an existing position.') }}
+        </div>
+        <div v-if="executionPreview" class="workspace-notice neutral config-group-title" aria-live="polite">
+          <strong>{{ $t('Draft cost preview') }}</strong>
+          <p>{{ $t('Estimated notional') }}: {{ fmt(executionPreview.notional, 6) }} USDT ·
+            {{ $t('Gross TP target') }}: +{{ fmt(executionPreview.tp, 6) }} USDT ·
+            {{ $t('Gross SL threshold') }}: −{{ fmt(executionPreview.sl, 6) }} USDT ·
+            {{ $t('Estimated round-trip fees') }}: {{ fmt(executionPreview.fees, 6) }} USDT</p>
+          <p>{{ $t('Base-margin estimate only. Risk caps and contract rounding may reduce size. Fees use equal entry/exit notional; spread, slippage and funding are excluded.') }}</p>
+          <p v-if="executionPreview.belowCosts" class="error-message" role="status">{{ $t('Gross TP is below estimated fees: a TP exit can still be a net loss.') }}</p>
+          <p>{{ $t('Percent units: 0.1 means 0.1%, not 10%. TP/SL use gross PnL; closed results include fees.') }}</p>
+        </div>
         <div class="workspace-notice neutral config-group-title">{{ $t('Live activation unavailable in this workspace') }}</div>
         <label>{{ $t("Execution mode") }}<select v-model="form.execution_mode" :disabled="Boolean(openPosition)">
             <option value="paper">{{ $t("Paper") }}</option>

@@ -1,6 +1,13 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Saved configuration': 'Сохранённая конфигурация', 'Unsaved draft': 'Несохранённый черновик', 'Saved settings': 'Сохранённые настройки',
+  'Runtime mode': 'Режим из последнего ответа state', 'Open position mode': 'Режим открытой позиции', 'Unknown': 'Неизвестно',
+  'Editing this form does not switch the running bot or an existing position.': 'Редактирование формы не переключает работающего бота или существующую позицию.',
+  'Draft cost preview': 'Расчёт по настройкам формы', 'Gross TP target': 'Цель TP до комиссий', 'Gross SL threshold': 'Порог SL до комиссий', 'Estimated round-trip fees': 'Оценка комиссий за вход и выход',
+  'Base-margin estimate only. Risk caps and contract rounding may reduce size. Fees use equal entry/exit notional; spread, slippage and funding are excluded.': 'Расчёт от базовой маржи. Лимиты риска и округление контрактов могут уменьшить размер. Комиссии оценены при одинаковом номинале входа и выхода; спред, проскальзывание и funding не включены.',
+  'Gross TP is below estimated fees: a TP exit can still be a net loss.': 'Цель TP до комиссий ниже оценки затрат: закрытие по TP может дать чистый убыток.',
+  'Percent units: 0.1 means 0.1%, not 10%. TP/SL use gross PnL; closed results include fees.': 'Единицы: 0.1 означает 0.1%, не 10%. TP/SL проверяют PnL до комиссий; результат закрытия учитывает комиссии.',
   'Theme': 'Тема', 'Light': 'Светлая', 'Dark': 'Тёмная', 'System': 'Системная',
   'Archive management': 'Управление архивом', 'Archive all closed trades': 'Архивировать все закрытые сделки', 'Unarchive all': 'Восстановить все из архива', 'Delete all archived trades': 'Удалить весь архив', 'Export non-archived trades': 'Экспорт неархивных сделок', 'Exporting...': 'Экспорт...', 'Archiving...': 'Архивация...', 'Restoring...': 'Восстановление...', 'Deleting...': 'Удаление...', 'Saving...': 'Сохранение...', 'Closing...': 'Закрытие...', 'Resetting...': 'Сброс...', 'Current margin USDT': 'Текущая маржа · USDT', 'Set current margin': 'Изменить маржу', 'Reset recovery to base margin': 'Сбросить маржу к базовой',
   'Last protection check': 'Последняя проверка защиты', 'Protection expiry': 'Срок действия защиты', 'Funding PnL': 'PnL финансирования', 'Funding status': 'Статус финансирования', 'Legacy reconciliation': 'Сверка старой позиции', 'Open': 'Открыта', 'Open failed': 'Ошибка открытия', 'Close failed': 'Ошибка закрытия', 'Reconciled': 'Сверена', 'Yes': 'Да', 'No': 'Нет',
