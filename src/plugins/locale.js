@@ -1,6 +1,17 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Current paper session only. Simulated PnL, not confirmed profit.': 'Только текущая paper-сессия. Симулированный PnL, не подтверждённая прибыль.',
+  'Legacy paper results only. Simulated PnL.': 'Только paper-история до сессий. Симулированный PnL.',
+  'Live ledger only. Verify fills, fees and reconciliation.': 'Только live-учёт. Проверяйте fills, комиссии и сверку с биржей.',
+  'Accounting scope unavailable; do not compare with trading history.': 'Область учёта неизвестна; не сравнивайте итог с историей сделок.',
+  'History preserves all sessions and modes; summary metrics use the current accounting scope.': 'История сохраняет все сессии и режимы; сводная статистика относится только к текущей области учёта.',
+  'Close requested; execution unresolved': 'Запрос закрытия принят; исполнение пока не подтверждено', 'Cancelled': 'Отменён',
+  'Fixed paper latency ms': 'Фиксированная paper-задержка, мс', 'Pending entry TTL seconds': 'Срок действия pending-входа, с',
+  'Paper session': 'Paper-сессия', 'Legacy paper history': 'История до сессий', 'New paper session': 'Новая paper-сессия', 'Paper session created': 'Paper-сессия создана',
+  'Start a new paper experiment? History is preserved; balance and metrics start separately.': 'Начать новый paper-эксперимент? История сохранится; баланс и статистика будут учитываться отдельно.',
+  'Paper uses fixed latency and full-depth fills only. Partial fills and queue priority are not simulated. Exits wait visibly when fresh data or depth are unavailable.': 'Paper использует фиксированную задержку и полное исполнение по глубине. Частичные fills и очередь не моделируются. Без свежих данных или глубины выход остаётся в явном ожидании.',
+  'Pending paper entry': 'Ожидающий paper-вход', 'Paper exit status': 'Состояние paper-выхода',
   'Saved configuration': 'Сохранённая конфигурация', 'Unsaved draft': 'Несохранённый черновик', 'Saved settings': 'Сохранённые настройки',
   'Runtime mode': 'Режим из последнего ответа state', 'Open position mode': 'Режим открытой позиции', 'Unknown': 'Неизвестно',
   'Editing this form does not switch the running bot or an existing position.': 'Редактирование формы не переключает работающего бота или существующую позицию.',

@@ -29,6 +29,9 @@ export default {
     startPaper() {
         return apiClient.post("/orderbook-recovery/start-paper", {});
     },
+    newPaperSession() {
+        return apiClient.post("/orderbook-recovery/paper-sessions", {});
+    },
     stop() {
         return apiClient.post("/orderbook-recovery/stop", {});
     },

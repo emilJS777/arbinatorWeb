@@ -7,6 +7,11 @@ import {canStartPaper, pnlEvidence, protectionLabel, sectionTitle, settingsChang
 
 export default {
   computed: {
+    accountingNote() {
+      if (this.metrics?.accounting_scope === 'paper_session') return this.metrics.paper_session_id ? 'Current paper session only. Simulated PnL, not confirmed profit.' : 'Legacy paper results only. Simulated PnL.';
+      if (this.metrics?.accounting_scope === 'live_history') return 'Live ledger only. Verify fills, fees and reconciliation.';
+      return 'Accounting scope unavailable; do not compare with trading history.';
+    },
     executionPreview() { return executionPreview(this.form || {}); },
     section() { return this.$route.meta.workspaceSection || 'overview'; },
     pageTitle() { return sectionTitle(this.section); },
@@ -310,6 +315,13 @@ export default {
         });
       });
     },
+    newPaperSession() {
+      if (!window.confirm(this.$t('Start a new paper experiment? History is preserved; balance and metrics start separately.'))) return;
+      this.runAction('newPaperSession', async () => {
+        const res = await this.$store.dispatch('orderBookRecovery/NEW_PAPER_SESSION');
+        this.emitter.emit('toster', {success: isResponseSuccess(res), msg: isResponseSuccess(res) ? this.$t('Paper session created') : getResponseMessage(res)});
+      });
+    },
     closePosition() {
       if (!this.openPosition) return;
       if (!window.confirm(this.$t(this.openPosition.execution_mode === 'live' ? 'Close live position on the exchange? This sends a real closing order.' : 'Close current paper position manually?'))) return;
@@ -317,7 +329,7 @@ export default {
         const res = await this.$store.dispatch("orderBookRecovery/CLOSE_MANUAL", this.openPosition.id);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
-          msg: isResponseSuccess(res) ? "Position closed manually" : getResponseMessage(res),
+          msg: isResponseSuccess(res) ? this.$t(res.data?.obj?.closed_at ? 'Position closed manually' : 'Close requested; execution unresolved') : getResponseMessage(res),
         });
       });
     },
@@ -439,6 +451,8 @@ export default {
       return "neutral";
     },
     resultLabel(trade) {
+      if (trade?.live_status === 'paper_pending') return 'Pending';
+      if (trade?.live_status === 'paper_cancelled') return 'Cancelled';
       if (["open_failed", "close_failed"].includes(trade?.live_status)) return "Failed";
       if (!trade?.closed_at) return "Floating";
       if (trade?.execution_mode === 'live' && pnlEvidence(trade) !== 'Exchange-reconciled PnL') return 'Unverified';
@@ -806,6 +820,8 @@ export default {
     </div>
     <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
     <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
+    <div v-if="statePayload?.pending_order" role="status" class="workspace-notice neutral">{{ $t('Pending paper entry') }} #{{ statePayload.pending_order.id }} · {{ statePayload.pending_order.pending_entry_expires_at }} · {{ statePayload.pending_order.live_error || 'paper_pending' }}</div>
+    <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" role="status" class="workspace-notice">{{ $t('Paper exit status') }}: {{ openPosition.paper_exit_status }}</div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
       {{ $t('Backend unavailable. Retained data may be out of date.') }}
     </div>
@@ -814,7 +830,7 @@ export default {
       <div class="summary-card"><span>{{ $t('Entries') }}</span><strong>{{ !statePayload ? $t('No data yet') : $t(statePayload.enabled && !recoveryState.is_stopped ? 'Running' : 'Paused') }}</strong><small>{{ recoveryState.stop_reason || debug?.reason_if_not_trading || '—' }}</small></div>
       <div class="summary-card"><span>{{ $t('Execution venue') }}</span><strong>{{ config?.exchange || '—' }}</strong><small>{{ config?.symbol || '—' }} · {{ config?.execution_mode || '—' }}</small></div>
       <div class="summary-card"><span>{{ $t('Position exposure') }}</span><strong>{{ fmt(openPosition?.notional ?? (statePayload ? 0 : null), 2) }}</strong><small>{{ $t("USDT ·") }}{{ openPosition?.side || $t('No open position') }}</small></div>
-      <div class="summary-card"><span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}</strong><small>{{ $t("USDT ·") }}{{ $t('Mixed paper/live ledger. Not verified profit.') }}</small></div>
+      <div class="summary-card"><span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}</strong><small>{{ $t("USDT ·") }}{{ $t(accountingNote) }}</small></div>
     </section>
     <section v-if="section === 'overview'" class="recovery-section">
       <h3>{{ $t('Management and reconciliation') }}</h3>
@@ -828,7 +844,7 @@ export default {
     </section>
     <section class="summary-grid" v-if="section === 'positions'">
       <div class="summary-card" :class="metricTone(metrics?.net_pnl)">
-        <span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}{{ $t("USDT") }}</strong><small>{{ $t('Mixed paper/live ledger. Not verified profit.') }}</small>
+        <span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}{{ $t("USDT") }}</strong><small>{{ $t(accountingNote) }}</small>
       </div>
       <div class="summary-card positive">
         <span>{{ $t("Total Wins") }}</span><strong>{{ fmt(metrics?.total_win_pnl, 2) }}{{ $t("USDT") }}</strong>
@@ -915,7 +931,13 @@ export default {
         <label>{{ $t("Max consecutive losses") }}<input v-model.number="form.max_consecutive_losses" type="number" min="1"/></label>
         <label class="checkbox-label"><input v-model="form.emergency_entry_block" type="checkbox"/>{{ $t("Block new entries") }}</label>
         <label>{{ $t("Paper taker fee %") }}<input v-model.number="form.paper_taker_fee_percent" type="number" min="0" step="0.01"/></label>
-        <label>{{ $t("Paper latency ms") }}<input v-model.number="form.paper_latency_ms" type="number" min="0"/></label>
+        <label>{{ $t("Fixed paper latency ms") }}<input v-model.number="form.paper_latency_ms" type="number" min="0"/></label>
+        <label>{{ $t('Pending entry TTL seconds') }}<input v-model.number="form.pending_entry_ttl_seconds" type="number" min="0.1" max="3600" step="0.1"/></label>
+        <div class="workspace-notice neutral config-group-title">
+          {{ $t('Paper uses fixed latency and full-depth fills only. Partial fills and queue priority are not simulated. Exits wait visibly when fresh data or depth are unavailable.') }}
+          <p>{{ $t('Paper session') }}: {{ config?.paper_session_id || $t('Legacy paper history') }}</p>
+          <button :disabled="actionLoading.newPaperSession || formDirty || config?.execution_mode !== 'paper' || statePayload?.enabled !== false || !!openPosition || !!statePayload?.pending_order" @click="newPaperSession">{{ $t('New paper session') }}</button>
+        </div>
         <label>{{ $t("TP % of margin") }}<input v-model.number="form.take_profit_percent_of_margin" type="number" step="0.1"/></label>
         <label>{{ $t("SL % of margin") }}<input v-model.number="form.stop_loss_percent_of_margin" type="number" step="0.1"/></label>
         <label>{{ $t("Max daily loss") }}<input v-model.number="form.max_daily_loss_usdt" type="number"/></label>
@@ -1344,6 +1366,8 @@ export default {
 
     <section class="recovery-section" v-if="section === 'positions'">
       <h3>{{ $t("Last Trades") }}</h3>
+      <p>{{ $t('History preserves all sessions and modes; summary metrics use the current accounting scope.') }}</p>
+      <p v-if="metrics?.paper_session_id">{{ $t('Paper session') }}: {{ metrics.paper_session_id }}</p>
       <div class="action-row">
         <label>{{ $t('Mode') }}<select v-model="historyMode"><option value="all">{{ $t('All modes') }}</option><option value="paper">{{ $t("Paper") }}</option><option value="live">{{ $t("Live") }}</option></select></label>
         <label class="check-row"><input :checked="showArchived" type="checkbox" @change="setShowArchived"/>{{ $t("Show archived trades") }}</label>

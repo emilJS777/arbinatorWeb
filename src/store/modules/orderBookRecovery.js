@@ -151,6 +151,15 @@ export default {
             ]);
             return res;
         },
+        async NEW_PAPER_SESSION({dispatch, commit}) {
+            const res = await orderBookRecoveryApi.newPaperSession();
+            if (res.data?.success) {
+                commit('SET_STATE', res.data.obj);
+                commit('SET_CONFIG', res.data.obj.config);
+            }
+            await Promise.allSettled([dispatch('LOAD_STATUS'), dispatch('LOAD_TRADES')]);
+            return res;
+        },
         async CLEAR_DIAGNOSTICS({ dispatch }) {
             const res = await orderBookRecoveryApi.clearDiagnostics();
             await dispatch("LOAD_DEBUG");
