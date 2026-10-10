@@ -14,17 +14,23 @@ test('Save reads post-write state and discards polling started before Save', asy
   };
   let source = await readFile(new URL('../src/store/modules/orderBookRecovery.js', import.meta.url),'utf8');
   source = source.replace('import orderBookRecoveryApi from "@/api/orderBookRecovery.js";', 'const orderBookRecoveryApi = globalThis.__saveRaceApi;');
-  for (const file of ['orderBookRecoveryConfig','pollingGuard','safePayload']) {
+  for (const file of ['orderBookRecoveryConfig','pollingGuard','safePayload','runtimeStateStatus']) {
     source = source.replace(`@/utils/${file}.js`, new URL(`../src/utils/${file}.js`,import.meta.url).href);
   }
   const module = (await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'))).default;
   const commits=[];
-  const context={commit:(key,value)=>commits.push([key,value])};
+  const state = structuredClone(module.state);
+  const context={commit:(key,value)=>{commits.push([key,value]); module.mutations[key](state,value);}};
   const polling = module.actions.LOAD_STATUS(context);
   await module.actions.SAVE_CONFIG(context, config);
   release({data:{success:true,obj:{enabled:true,config:{execution_mode:'live'}}}});
   await polling;
   assert.equal(reads,2);
-  assert.deepEqual(commits.filter(([key])=>key==='SET_STATE').map(([,value])=>value),[{config,enabled:false}]);
+  assert.deepEqual(state.STATE, {config,enabled:false});
+  assert.equal(commits.filter(([key])=>key==='SET_STATE_RESPONSE').length, 1);
+  module.mutations.SET_STATE_RESPONSE(state, {status:500,data:{success:false,obj:{incident_id:'state-incident'}}});
+  assert.deepEqual(state.STATE, {config,enabled:false});
+  assert.equal(state.STATE_REQUEST.stale,true);
+  assert.equal(state.STATE_REQUEST.incidentId,'state-incident');
   delete globalThis.__saveRaceApi;
 });

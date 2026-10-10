@@ -34,7 +34,7 @@ export const runPollingGroup = async ({runtime, name, requests, onUnavailableCha
     const responses = settled.map(result =>
       result.status === "fulfilled"
         ? result.value
-        : {data: {success: false, obj: {msg: result.reason?.message || "Request failed"}}, status: result.reason?.response?.status || 0}
+        : {data: result.reason?.response?.data || {success: false, obj: null}, status: result.reason?.response?.status || 0}
     );
     const has503 = responses.some(isUnavailableResponse);
     if (has503) {

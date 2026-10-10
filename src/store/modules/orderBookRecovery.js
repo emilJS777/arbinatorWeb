@@ -2,8 +2,9 @@ import orderBookRecoveryApi from "@/api/orderBookRecovery.js";
 import {normalizeConfigForm} from "@/utils/orderBookRecoveryConfig.js";
 import {createPollingRuntime, runPollingGroup} from "@/utils/pollingGuard.js";
 import {isValidMlStats, normalizeArray} from "@/utils/safePayload.js";
+import {emptyRuntimeStateStatus, inspectRuntimeStateResponse} from "@/utils/runtimeStateStatus.js";
 
-const safeRequest = promise => promise.catch(() => ({data: {success: false, obj: null}}));
+const safeRequest = promise => promise.catch(error => ({status: error?.response?.status || 0, data: error?.response?.data || {success: false, obj: null}}));
 const pollRuntime = createPollingRuntime();
 let configGeneration = 0;
 const runStorePollingGroup = (context, name, requests) => runPollingGroup({
@@ -19,6 +20,7 @@ export default {
         CONFIG: null,
         OPTIONS: {exchanges: []},
         STATE: null,
+        STATE_REQUEST: emptyRuntimeStateStatus(),
         TRADES: [],
         METRICS: null,
         DEBUG: null,
@@ -58,7 +60,7 @@ export default {
             );
             if (config.data.success) commit("SET_CONFIG", config.data.obj);
             if (options.data.success) commit("SET_OPTIONS", options.data.obj);
-            if (stateResponse.data.success) commit("SET_STATE", stateResponse.data.obj);
+            commit("SET_STATE_RESPONSE", stateResponse);
             if (trades.data.success) commit("SET_TRADES", trades.data.obj);
             if (metrics.data.success) commit("SET_METRICS", metrics.data.obj);
             if (debug.data.success) commit("SET_DEBUG", debug.data.obj);
@@ -76,7 +78,7 @@ export default {
             if (skipped) return {skipped: true};
             if (generation !== configGeneration) return {skipped: true};
             const [stateResponse, metrics] = responses;
-            if (stateResponse?.data?.success) commit("SET_STATE", stateResponse.data.obj);
+            commit("SET_STATE_RESPONSE", stateResponse);
             if (metrics?.data?.success) commit("SET_METRICS", metrics.data.obj);
             return stateResponse;
         },
@@ -140,7 +142,7 @@ export default {
                 commit("SET_CONFIG", res.data.obj);
                 // A user Save needs a post-write state read, even during polling backoff.
                 const refreshed = await safeRequest(orderBookRecoveryApi.getState());
-                if (generation === configGeneration && refreshed.data?.success) commit("SET_STATE", refreshed.data.obj);
+                if (generation === configGeneration) commit("SET_STATE_RESPONSE", refreshed);
             }
             return res;
         },
@@ -163,7 +165,7 @@ export default {
         async NEW_PAPER_SESSION({dispatch, commit}) {
             const res = await orderBookRecoveryApi.newPaperSession();
             if (res.data?.success) {
-                commit('SET_STATE', res.data.obj);
+                commit('SET_STATE_RESPONSE', res);
                 commit('SET_CONFIG', res.data.obj.config);
             }
             await Promise.allSettled([dispatch('LOAD_STATUS'), dispatch('LOAD_TRADES')]);
@@ -270,6 +272,11 @@ export default {
         },
     },
     mutations: {
+        SET_STATE_RESPONSE(state, response) {
+            const inspected = inspectRuntimeStateResponse(response, state.STATE_REQUEST);
+            state.STATE_REQUEST = inspected.status;
+            if (inspected.accepted) state.STATE = inspected.payload;
+        },
         SET_CONFIG(state, payload) {
             state.CONFIG = payload ? normalizeConfigForm(payload) : payload;
         },

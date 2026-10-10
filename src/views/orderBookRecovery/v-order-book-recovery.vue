@@ -25,6 +25,7 @@ export default {
       config: state => state.orderBookRecovery.CONFIG,
       options: state => state.orderBookRecovery.OPTIONS,
       statePayload: state => state.orderBookRecovery.STATE,
+      stateRequest: state => state.orderBookRecovery.STATE_REQUEST,
       trades: state => state.orderBookRecovery.TRADES,
       metrics: state => state.orderBookRecovery.METRICS,
       debug: state => state.orderBookRecovery.DEBUG,
@@ -826,15 +827,23 @@ export default {
     </div>
     <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
     <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
+    <div class="workspace-notice neutral" role="status">
+      <p>{{ $t('Last state request') }}: {{ stateRequest?.httpStatus === null ? '—' : (stateRequest?.httpStatus || $t('Network error')) }} · {{ dt(stateRequest?.lastAttemptAt) }} · {{ $t('Last successful state') }}: {{ dt(stateRequest?.lastSuccessfulAt) }}</p>
+      <p v-if="stateRequest?.stale">{{ $t('State request failed; retained values are not current runtime evidence') }} <span v-if="stateRequest.incidentId">incident_id: {{ stateRequest.incidentId }}</span></p>
+      <p v-if="stateRequest?.missingFields?.length">{{ $t('State contract fields missing; check deployed compatibility') }}: {{ stateRequest.missingFields.join(', ') }}</p>
+      <p v-if="statePayload?.runtime_diagnostics">{{ $t('State source process') }}: {{ statePayload.runtime_diagnostics.instance }} / {{ statePayload.runtime_diagnostics.process_id }} · {{ $t('State contract') }}: {{ statePayload.runtime_diagnostics.state_contract_version }} · {{ $t('Build revision') }}: {{ statePayload.runtime_diagnostics.build_revision || $t('Unknown') }}</p>
+    </div>
     <div v-if="statePayload?.pending_order" role="status" class="workspace-notice neutral">{{ $t('Pending paper entry') }} #{{ statePayload.pending_order.id }} · {{ statePayload.pending_order.pending_entry_expires_at }} · {{ statePayload.pending_order.live_error || 'paper_pending' }}</div>
     <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" role="status" class="workspace-notice">{{ $t('Paper exit status') }}: {{ $t(openPosition.paper_exit_status) }}</div>
-    <div v-if="openPosition?.execution_mode === 'paper'" class="workspace-notice neutral" role="status">
+    <div v-if="openPosition && openPosition.execution_mode !== 'live'" class="workspace-notice neutral" role="status">
       <template v-if="statePayload?.paper_exit_diagnostics">
         <p>{{ $t('Exit blocking reason') }}: {{ $t(statePayload.paper_exit_diagnostics.exit_block_reason) }}</p>
         <p>{{ $t('Pending age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.pending_age_seconds) }} · {{ $t('Latency deadline UTC') }}: {{ statePayload.paper_exit_diagnostics.latency_deadline || '—' }}</p>
         <p>{{ $t('Valid execution book age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.last_valid_book_age_seconds) }} · {{ $t('Worker heartbeat UTC') }}: {{ statePayload.paper_exit_diagnostics.worker_heartbeat || '—' }} · {{ $t('Worker age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.worker_age_seconds) }}</p>
+        <p>{{ $t('Execution book source') }}: {{ statePayload.paper_exit_diagnostics.execution_exchange || '—' }} / {{ statePayload.paper_exit_diagnostics.execution_symbol || '—' }} · {{ statePayload.paper_exit_diagnostics.resolved_book_symbol || '—' }} · {{ statePayload.paper_exit_diagnostics.book_market_type || '—' }}</p>
+        <p>{{ $t('Book source / received UTC') }}: {{ statePayload.paper_exit_diagnostics.book_source_at || '—' }} / {{ statePayload.paper_exit_diagnostics.book_received_at || '—' }}</p>
       </template>
-      <p v-else>{{ $t('Exit diagnostics unavailable; check backend deployment version') }}</p>
+      <p v-else>{{ $t(stateRequest?.stale ? 'State request failed; retained values are not current runtime evidence' : 'Exit diagnostics absent in last state response; inspect HTTP response and compatibility') }}</p>
       <p>{{ $t('Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.') }}</p>
     </div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">

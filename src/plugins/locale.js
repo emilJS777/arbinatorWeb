@@ -1,6 +1,17 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Last state request': 'Последний запрос state',
+  'Last successful state': 'Последний успешный state',
+  'Network error': 'Ошибка сети',
+  'State request failed; retained values are not current runtime evidence': 'Запрос state неуспешен: сохранённые данные не подтверждают текущее состояние бота',
+  'State contract fields missing; check deployed compatibility': 'В ответе state отсутствуют поля; проверьте совместимость развёрнутых версий',
+  'Exit diagnostics absent in last state response; inspect HTTP response and compatibility': 'В последнем state нет диагностики выхода; проверьте HTTP-ответ и совместимость версий',
+  'State source process': 'Процесс-источник state',
+  'State contract': 'Версия контракта state',
+  'Build revision': 'Ревизия сборки',
+  'Execution book source': 'Источник стакана для исполнения',
+  'Book source / received UTC': 'Время источника / получения стакана UTC',
   'pending_fixed_latency': 'Ожидание минимальной задержки исполнения',
   'unresolved_no_fresh_valid_book': 'Исполнение не подтверждено: нет свежего валидного стакана',
   'unresolved_no_fresh_book_or_depth': 'Исполнение не подтверждено: нет свежего стакана или глубины',
