@@ -1,6 +1,26 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'pending_fixed_latency': 'Ожидание минимальной задержки исполнения',
+  'unresolved_no_fresh_valid_book': 'Исполнение не подтверждено: нет свежего валидного стакана',
+  'unresolved_no_fresh_book_or_depth': 'Исполнение не подтверждено: нет свежего стакана или глубины',
+  'missing_execution_book': 'Нет стакана биржи открытой позиции',
+  'stale_snapshot': 'Стакан устарел', 'no_new_book_after_latency': 'Нет нового стакана после срока задержки',
+  'future_book_not_available': 'Timestamp стакана находится в будущем',
+  'incompatible_futures_snapshot': 'Стакан не соответствует USDT linear swap',
+  'missing_source_timestamp': 'Нет timestamp источника или получения',
+  'insufficient_exit_depth': 'Недостаточная глубина для полного закрытия',
+  'awaiting_management_tick': 'Данные готовы; ожидается обработка worker', 'monitoring': 'Мониторинг позиции',
+  'manual_stop': 'Входы приостановлены вручную',
+  'Exit blocking reason': 'Причина ожидания выхода', 'Pending age seconds': 'Возраст запроса, с',
+  'Latency deadline UTC': 'Минимальное время исполнения UTC', 'Valid execution book age seconds': 'Возраст валидного стакана для выхода, с',
+  'Worker heartbeat UTC': 'Последний запуск worker UTC', 'Worker age seconds': 'Возраст heartbeat, с',
+  'Exit diagnostics unavailable; check backend deployment version': 'Диагностика выхода недоступна; проверьте версию backend на сервере',
+  'Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.': 'Heartbeat относится к текущему процессу. Соединение WebSocket не подтверждает свежесть futures-данных. Задержка минимальная, не гарантия времени fill.',
+  'Estimated net TP / SL': 'Оценка TP / SL после комиссий', 'Break-even win rate': 'Доля побед для безубыточности',
+  'Not attainable under these assumptions': 'Недостижимо при этих допущениях',
+  'Binary TP/SL outcomes at target prices, equal entry/exit notional fees; excludes slippage, spread, funding and latency overshoot. Not a profitability forecast.': 'Только два исхода по целевым TP/SL, комиссии при равном номинале входа/выхода; без спреда, проскальзывания, funding и отклонений за время задержки. Это не прогноз прибыли.',
+  'A loss limit exceeds configured paper equity; it may not protect the account before capital is exhausted. Existing sessions use their frozen initial equity.': 'Лимит убытка превышает настроенный paper-капитал: защита может сработать уже после его исчерпания. Созданная сессия использует зафиксированный начальный капитал.',
   'Start request in progress': 'Запрос Start выполняется',
   'Saved configuration not loaded; refresh and check the API': 'Сохранённая конфигурация не загружена; обновите данные и проверьте API',
   'Saved mode is LIVE; live activation is intentionally locked in this UI': 'Сохранён режим LIVE; запуск live намеренно заблокирован в этом интерфейсе',
@@ -87,6 +107,17 @@ const ru = {
   'Close current paper position manually?': 'Закрыть текущую paper-позицию вручную?', 'Close live position on the exchange? This sends a real closing order.': 'Закрыть live-позицию на бирже? Это отправит реальный ордер закрытия.',
 };
 
+const en = {
+  pending_fixed_latency: 'Waiting for minimum execution latency',
+  unresolved_no_fresh_valid_book: 'Unresolved: no fresh valid book',
+  unresolved_no_fresh_book_or_depth: 'Unresolved: no fresh book or sufficient depth',
+  missing_execution_book: 'Execution venue book unavailable', stale_snapshot: 'Stale book',
+  no_new_book_after_latency: 'No new book after latency deadline', future_book_not_available: 'Book timestamp is in the future',
+  incompatible_futures_snapshot: 'Book is not a compatible USDT linear swap', missing_source_timestamp: 'Source or receipt timestamp missing',
+  insufficient_exit_depth: 'Insufficient depth for full exit', awaiting_management_tick: 'Ready; awaiting worker tick',
+  monitoring: 'Monitoring position', manual_stop: 'New entries paused manually',
+};
+
 export default {
   install(app) {
     const locale = reactive({value: localStorage.getItem('lang') === 'ru' ? 'ru' : 'en'});
@@ -94,6 +125,6 @@ export default {
     setLocale(locale.value);
     app.config.globalProperties.$locale = locale;
     app.config.globalProperties.$setLocale = setLocale;
-    app.config.globalProperties.$t = text => locale.value === 'ru' ? (ru[text] || text) : text;
+    app.config.globalProperties.$t = text => locale.value === 'ru' ? (ru[text] || en[text] || text) : (en[text] || text);
   },
 };

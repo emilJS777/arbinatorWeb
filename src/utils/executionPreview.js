@@ -8,5 +8,9 @@ export function executionPreview(config = {}) {
   const tp = margin * Number(config.take_profit_percent_of_margin) / 100;
   const sl = margin * Number(config.stop_loss_percent_of_margin) / 100;
   const fees = 2 * notional * Number(config[feeKey]) / 100;
-  return {notional, tp, sl, fees, belowCosts: tp < fees};
+  const netTp = tp - fees;
+  const netSl = -sl - fees;
+  const breakEvenWinRate = netTp > 0 ? 100 * (-netSl) / (netTp - netSl) : null;
+  const lossLimitsExceedEquity = ['max_daily_loss_usdt', 'max_total_loss_usdt'].some(key => Number(config[key]) > Number(config.paper_equity_usdt));
+  return {notional, tp, sl, fees, netTp, netSl, breakEvenWinRate, lossLimitsExceedEquity, belowCosts: tp < fees};
 }

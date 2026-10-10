@@ -822,11 +822,21 @@ export default {
     <div v-if="section === 'overview'" id="start-block-reasons" role="status" aria-live="polite">
       <ul v-if="startBlockReasons.length" class="workspace-notice"><li v-for="reason in startBlockReasons" :key="reason">{{ $t(reason) }}</li></ul>
       <p>{{ $t('Saved configuration') }}: {{ config?.execution_mode || '—' }} · {{ $t('Runtime mode') }}: {{ statePayload?.config?.execution_mode || '—' }} · {{ $t('Unsaved draft') }}: {{ form?.execution_mode || '—' }}</p>
+      <p v-if="config?.execution_mode === 'live'">{{ $t('Live activation locked') }}</p>
     </div>
     <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
     <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
     <div v-if="statePayload?.pending_order" role="status" class="workspace-notice neutral">{{ $t('Pending paper entry') }} #{{ statePayload.pending_order.id }} · {{ statePayload.pending_order.pending_entry_expires_at }} · {{ statePayload.pending_order.live_error || 'paper_pending' }}</div>
-    <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" role="status" class="workspace-notice">{{ $t('Paper exit status') }}: {{ openPosition.paper_exit_status }}</div>
+    <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" role="status" class="workspace-notice">{{ $t('Paper exit status') }}: {{ $t(openPosition.paper_exit_status) }}</div>
+    <div v-if="openPosition?.execution_mode === 'paper'" class="workspace-notice neutral" role="status">
+      <template v-if="statePayload?.paper_exit_diagnostics">
+        <p>{{ $t('Exit blocking reason') }}: {{ $t(statePayload.paper_exit_diagnostics.exit_block_reason) }}</p>
+        <p>{{ $t('Pending age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.pending_age_seconds) }} · {{ $t('Latency deadline UTC') }}: {{ statePayload.paper_exit_diagnostics.latency_deadline || '—' }}</p>
+        <p>{{ $t('Valid execution book age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.last_valid_book_age_seconds) }} · {{ $t('Worker heartbeat UTC') }}: {{ statePayload.paper_exit_diagnostics.worker_heartbeat || '—' }} · {{ $t('Worker age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.worker_age_seconds) }}</p>
+      </template>
+      <p v-else>{{ $t('Exit diagnostics unavailable; check backend deployment version') }}</p>
+      <p>{{ $t('Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.') }}</p>
+    </div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
       {{ $t('Backend unavailable. Retained data may be out of date.') }}
     </div>
@@ -893,6 +903,9 @@ export default {
             {{ $t('Estimated round-trip fees') }}: {{ fmt(executionPreview.fees, 6) }} USDT</p>
           <p>{{ $t('Base-margin estimate only. Risk caps and contract rounding may reduce size. Fees use equal entry/exit notional; spread, slippage and funding are excluded.') }}</p>
           <p v-if="executionPreview.belowCosts" class="error-message" role="status">{{ $t('Gross TP is below estimated fees: a TP exit can still be a net loss.') }}</p>
+          <p>{{ $t('Estimated net TP / SL') }}: {{ fmt(executionPreview.netTp, 6) }} / {{ fmt(executionPreview.netSl, 6) }} USDT · {{ $t('Break-even win rate') }}: {{ executionPreview.breakEvenWinRate === null ? $t('Not attainable under these assumptions') : fmt(executionPreview.breakEvenWinRate, 2) + '%' }}</p>
+          <p>{{ $t('Binary TP/SL outcomes at target prices, equal entry/exit notional fees; excludes slippage, spread, funding and latency overshoot. Not a profitability forecast.') }}</p>
+          <p v-if="form.execution_mode === 'paper' && executionPreview.lossLimitsExceedEquity" class="error-message">{{ $t('A loss limit exceeds configured paper equity; it may not protect the account before capital is exhausted. Existing sessions use their frozen initial equity.') }}</p>
           <p>{{ $t('Percent units: 0.1 means 0.1%, not 10%. TP/SL use gross PnL; closed results include fees.') }}</p>
         </div>
         <div class="workspace-notice neutral config-group-title">{{ $t('Live activation unavailable in this workspace') }}</div>
