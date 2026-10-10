@@ -5,9 +5,14 @@ import {canOfferPaperAbandonment, paperAbandonmentBody, paperCloseBlockReason, p
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 import {startBlockReasons, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
+import {overviewStatus, pageRows, datasetLabels, settingLabels} from '@/utils/dashboardPresentation.js';
 
 export default {
   computed: {
+    overviewStatus() {return overviewStatus(this.statePayload, this.stateRequest, this.debug, this.uiNow);},
+    actionableStartReasons() {return this.startBlockReasons.filter(reason => reason !== 'Entries already enabled; Start is not required');},
+    historyPageData() {return pageRows(this.visibleTrades, this.historyPage, this.historyPageSize);},
+    signalPageData() {return pageRows([...(this.debug?.signal_diagnostics_last_100 || [])].reverse(), this.signalPage, 20);},
     accountingNote() {
       if (this.metrics?.accounting_scope === 'paper_session') return this.metrics.paper_session_id ? 'Current paper session only. Simulated PnL, not confirmed profit.' : 'Legacy paper results only. Simulated PnL.';
       if (this.metrics?.accounting_scope === 'live_history') return 'Live ledger only. Verify fills, fees and reconciliation.';
@@ -110,6 +115,9 @@ export default {
       validationErrors: [],
       initialLoading: true,
       historyMode: 'all',
+      historyPage: 1,
+      historyPageSize: 20,
+      signalPage: 1,
       eventHandlers: {},
       uiNow: Date.now(),
       uiClock: null,
@@ -702,8 +710,11 @@ export default {
       if (column.includes("timestamp") || column === "created_at") return this.dt(value);
       if (typeof value === "number") return Number.isInteger(value) ? value : this.fmt(value, Math.abs(value) < 1 ? 6 : 4);
       if (value === null || value === undefined || value === "") return "-";
-      return value;
+      return ['label_status', 'result', 'final_side', 'proposed_side'].includes(column) ? this.$t(value) : value;
     },
+    datasetColumnLabel(column) {return this.$t(datasetLabels[column] || column.replaceAll('_', ' '));},
+    settingLabel(key) {return this.$t(settingLabels[key] || key);},
+    settingValue(value) {return typeof value === 'boolean' ? this.$t(value ? 'Yes' : 'No') : typeof value === 'string' ? this.$t(value) : String(value ?? '—');},
     mlExplorerBadgeTone(value) {
       if (["labeled", "win", "long", "shadow"].includes(value)) return "positive";
       if (["pending", "created"].includes(value)) return "warning";
@@ -837,21 +848,26 @@ export default {
       </div>
     </div>
     <div v-if="section === 'overview'" id="start-block-reasons" role="status" aria-live="polite">
-      <ul v-if="startBlockReasons.length" class="workspace-notice"><li v-for="reason in startBlockReasons" :key="reason">{{ $t(reason) }}</li></ul>
-      <p>{{ $t('Saved configuration') }}: {{ config?.execution_mode || '—' }} · {{ $t('Runtime mode') }}: {{ statePayload?.config?.execution_mode || '—' }} · {{ $t('Unsaved draft') }}: {{ form?.execution_mode || '—' }}</p>
+      <ul v-if="actionableStartReasons.length" class="workspace-notice compact-alert"><li v-for="reason in actionableStartReasons" :key="reason">{{ $t(reason) }}</li></ul>
+      <div v-else-if="statePayload?.enabled" class="inline-status"><span class="status-badge positive">{{ $t('Running') }}</span>{{ $t('Entries already enabled; Start is not required') }}</div>
       <p v-if="config?.execution_mode === 'live'">{{ $t('Live activation locked') }}</p>
     </div>
     <div v-if="initialLoading" role="status" class="workspace-notice neutral">{{ $t('Loading workspace...') }}</div>
     <div v-else-if="!config" role="alert" class="workspace-notice">{{ $t('Backend unavailable. Retained data may be out of date.') }}</div>
-    <div class="workspace-notice neutral" role="status">
+    <div v-if="stateRequest?.stale" class="workspace-notice compact-alert" role="alert">{{ $t('State request failed; retained values are not current runtime evidence') }}</div>
+    <div v-if="stateRequest?.missingFields?.length" class="workspace-notice compact-alert" role="alert">{{ $t('State contract fields missing; check deployed compatibility') }}</div>
+    <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" class="workspace-notice compact-alert" role="status">{{ $t('Paper exit status') }}: {{ $t(openPosition.paper_exit_status) }} <span v-if="statePayload?.paper_exit_diagnostics?.exit_block_reason">· {{ $t(statePayload.paper_exit_diagnostics.exit_block_reason) }}</span></div>
+    <div v-if="statePayload?.pending_order" class="pending-summary" role="status"><span class="status-badge info">{{ $t('Pending paper entry') }}</span> #{{ statePayload.pending_order.id }} <span>{{ $t('Expires at') }}: {{ dt(statePayload.pending_order.pending_entry_expires_at) }}</span></div>
+    <details class="system-details runtime-diagnostics">
+    <summary>{{ $t('Runtime diagnostics') }}<span>{{ $t('Request, worker and execution evidence') }}</span></summary>
+    <div class="diagnostics-body" role="status">
       <p>{{ $t('Last state request') }}: {{ stateRequest?.httpStatus === null ? '—' : (stateRequest?.httpStatus || $t('Network error')) }} · {{ dt(stateRequest?.lastAttemptAt) }} · {{ $t('Last successful state') }}: {{ dt(stateRequest?.lastSuccessfulAt) }}</p>
       <p v-if="stateRequest?.stale">{{ $t('State request failed; retained values are not current runtime evidence') }} <span v-if="stateRequest.incidentId">incident_id: {{ stateRequest.incidentId }}</span></p>
       <p v-if="stateRequest?.missingFields?.length">{{ $t('State contract fields missing; check deployed compatibility') }}: {{ stateRequest.missingFields.join(', ') }}</p>
       <p v-if="statePayload?.runtime_diagnostics">{{ $t('State source process') }}: {{ statePayload.runtime_diagnostics.instance }} / {{ statePayload.runtime_diagnostics.process_id }} · {{ $t('State contract') }}: {{ statePayload.runtime_diagnostics.state_contract_version }} · {{ $t('Build revision') }}: {{ statePayload.runtime_diagnostics.build_revision || $t('Unknown') }}</p>
     </div>
-    <div v-if="statePayload?.pending_order" role="status" class="workspace-notice neutral">{{ $t('Pending paper entry') }} #{{ statePayload.pending_order.id }} · {{ statePayload.pending_order.pending_entry_expires_at }} · {{ statePayload.pending_order.live_error || 'paper_pending' }}</div>
-    <div v-if="openPosition?.paper_exit_status && openPosition.paper_exit_status !== 'filled'" role="status" class="workspace-notice">{{ $t('Paper exit status') }}: {{ $t(openPosition.paper_exit_status) }}</div>
-    <div v-if="openPosition && openPosition.execution_mode !== 'live'" class="workspace-notice neutral" role="status">
+    <div v-if="statePayload?.pending_order" class="diagnostics-body">{{ statePayload.pending_order.live_error || 'paper_pending' }}</div>
+    <div v-if="openPosition && openPosition.execution_mode !== 'live'" class="diagnostics-body" role="status">
       <template v-if="statePayload?.paper_exit_diagnostics">
         <p>{{ $t('Exit blocking reason') }}: {{ $t(statePayload.paper_exit_diagnostics.exit_block_reason) }}</p>
         <p>{{ $t('Pending age seconds') }}: {{ fmt(statePayload.paper_exit_diagnostics.pending_age_seconds) }} · {{ $t('Latency deadline UTC') }}: {{ statePayload.paper_exit_diagnostics.latency_deadline || '—' }}</p>
@@ -862,27 +878,28 @@ export default {
       <p v-else>{{ $t(stateRequest?.stale ? 'State request failed; retained values are not current runtime evidence' : 'Exit diagnostics absent in last state response; inspect HTTP response and compatibility') }}</p>
       <p>{{ $t('Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.') }}</p>
     </div>
+    </details>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
       {{ $t('Backend unavailable. Retained data may be out of date.') }}
     </div>
 
     <section v-if="section === 'overview'" class="summary-grid" :aria-label="$t('Overview')">
-      <div class="summary-card"><span>{{ $t('Entries') }}</span><strong>{{ !statePayload ? $t('No data yet') : $t(statePayload.enabled && !recoveryState.is_stopped ? 'Running' : 'Paused') }}</strong><small>{{ recoveryState.stop_reason || debug?.reason_if_not_trading || '—' }}</small></div>
-      <div class="summary-card"><span>{{ $t('Execution venue') }}</span><strong>{{ config?.exchange || '—' }}</strong><small>{{ config?.symbol || '—' }} · {{ config?.execution_mode || '—' }}</small></div>
+      <div class="summary-card"><span>{{ $t('Bot status') }}</span><strong>{{ $t(overviewStatus.status) }}</strong><small>{{ $t(overviewStatus.waiting) }}</small></div>
+      <div class="summary-card"><span>{{ $t('Market data') }}</span><strong>{{ $t(overviewStatus.unverified ? 'Unverified' : bookAge === null ? 'No data yet' : bookAge > Number(config?.max_snapshot_age_seconds ?? 5) ? 'Stale' : 'Fresh') }}</strong><small>{{ config?.exchange || '—' }} · {{ config?.symbol || '—' }}<span v-if="bookAge !== null"> · {{ fmt(bookAge, 1) }} {{ $t('seconds') }}</span></small></div>
       <div class="summary-card"><span>{{ $t('Position exposure') }}</span><strong>{{ fmt(openPosition?.notional ?? (statePayload ? 0 : null), 2) }}</strong><small>{{ $t("USDT ·") }}{{ openPosition?.side || $t('No open position') }}</small></div>
-      <div class="summary-card"><span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}</strong><small>{{ $t("USDT ·") }}{{ $t(accountingNote) }}</small></div>
+      <div class="summary-card" :class="metricTone(metrics?.net_pnl)"><span>{{ $t(metrics?.accounting_scope === 'paper_session' ? 'Paper session result' : 'Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }} USDT</strong><small>{{ $t(accountingNote) }}</small></div>
     </section>
     <section v-if="section === 'overview'" class="recovery-section">
       <h3>{{ $t('Management and reconciliation') }}</h3>
-      <p class="workspace-notice neutral">{{ $t('Pausing entries does not close positions. Position management depends on the backend worker; check protection and reconciliation below.') }}</p>
+      <p class="section-help">{{ $t('Pausing entries does not close positions. Position management depends on the backend worker; check protection and reconciliation below.') }}</p>
       <div class="metric-grid">
         <div><span>{{ $t('Latest configured snapshot') }}</span><strong>{{ dt(statePayload?.last_order_book_snapshot_time || debug?.last_order_book_snapshot_time) }}</strong><small v-if="bookAge !== null" :class="bookAge > Number(config?.max_snapshot_age_seconds ?? 5) ? 'negative' : ''">{{ fmt(bookAge, 1) }}{{ $t("s ·") }}{{ $t(bookAge > Number(config?.max_snapshot_age_seconds ?? 5) ? 'Stale' : 'Fresh') }}</small></div>
-        <div><span>{{ $t('Entry blocked') }}</span><strong>{{ debug?.reason_if_not_trading || statePayload?.reason_if_not_trading || $t(statePayload ? 'No block reported' : 'No data yet') }}</strong></div>
+        <div><span>{{ $t('Entry blocked') }}</span><strong>{{ $t(debug?.reason_if_not_trading || statePayload?.reason_if_not_trading || (statePayload ? 'No block reported' : 'No data yet')) }}</strong></div>
         <div><span>{{ $t('Protection') }}</span><strong>{{ openPosition ? $t(formatProtectionStatus(openPosition)) : '—' }}</strong></div>
-        <div><span>{{ $t('Reconciliation') }}</span><strong>{{ openPosition?.live_error || openPosition?.live_status || '—' }}</strong></div>
+        <div><span>{{ $t('Reconciliation') }}</span><strong>{{ $t(openPosition?.live_error ? 'Needs attention' : openPosition?.live_status || 'Not required') }}</strong><details v-if="openPosition?.live_error"><summary>{{ $t('Raw error details') }}</summary><pre>{{ openPosition.live_error }}</pre></details></div>
       </div>
     </section>
-    <section class="summary-grid" v-if="section === 'positions'">
+    <section class="summary-grid positions-summary" v-if="section === 'positions'">
       <div class="summary-card" :class="metricTone(metrics?.net_pnl)">
         <span>{{ $t('Reported ledger PnL') }}</span><strong>{{ fmt(metrics?.net_pnl, 2) }}{{ $t("USDT") }}</strong><small>{{ $t(accountingNote) }}</small>
       </div>
@@ -895,6 +912,9 @@ export default {
       <div class="summary-card neutral">
         <span>{{ $t("Win Rate") }}</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong>
       </div>
+    </section>
+    <details class="system-details" v-if="section === 'positions'"><summary>{{ $t('More session metrics') }}</summary>
+    <section class="summary-grid secondary-metrics">
       <div class="summary-card neutral">
         <span>{{ $t("Profit Factor") }}</span><strong>{{ fmt(metrics?.profit_factor, 2) }}</strong>
       </div>
@@ -908,6 +928,7 @@ export default {
         <span>{{ $t("Current Margin") }}</span><strong>{{ fmt(recoveryState.current_margin, 2) }}{{ $t("USDT") }}</strong>
       </div>
     </section>
+    </details>
 
     <section class="recovery-section" v-if="form && section === 'settings'">
       <div class="section-title">
@@ -920,18 +941,22 @@ export default {
           {{ $t('Open position mode') }}: {{ openPosition?.execution_mode?.toUpperCase() || $t('No open position') }}.
           {{ $t('Editing this form does not switch the running bot or an existing position.') }}
         </div>
-        <div v-if="executionPreview" class="workspace-notice neutral config-group-title" aria-live="polite">
-          <strong>{{ $t('Draft cost preview') }}</strong>
-          <p>{{ $t('Estimated notional') }}: {{ fmt(executionPreview.notional, 6) }} USDT ·
-            {{ $t('Gross TP target') }}: +{{ fmt(executionPreview.tp, 6) }} USDT ·
-            {{ $t('Gross SL threshold') }}: −{{ fmt(executionPreview.sl, 6) }} USDT ·
-            {{ $t('Estimated round-trip fees') }}: {{ fmt(executionPreview.fees, 6) }} USDT</p>
+        <div v-if="executionPreview" class="cost-preview" aria-live="polite">
+          <h4>{{ $t('Draft cost preview') }}</h4>
+          <div class="cost-preview-grid">
+            <div><span>{{ $t('Estimated notional') }}</span><strong>{{ fmt(executionPreview.notional, 4) }} <small>USDT</small></strong></div>
+            <div><span>{{ $t('Gross TP target') }}</span><strong class="positive">+{{ fmt(executionPreview.tp, 4) }} <small>USDT</small></strong></div>
+            <div><span>{{ $t('Gross SL threshold') }}</span><strong class="negative">−{{ fmt(executionPreview.sl, 4) }} <small>USDT</small></strong></div>
+            <div><span>{{ $t('Estimated round-trip fees') }}</span><strong>{{ fmt(executionPreview.fees, 4) }} <small>USDT</small></strong></div>
+          </div>
+          <p v-if="executionPreview.belowCosts" class="workspace-notice compact-alert" role="status">{{ $t('Gross TP is below estimated fees: a TP exit can still be a net loss.') }}</p>
+          <p>{{ $t('Estimated net TP / SL') }}: <strong>{{ fmt(executionPreview.netTp, 4) }} / {{ fmt(executionPreview.netSl, 4) }} USDT</strong> · {{ $t('Break-even win rate') }}: {{ executionPreview.breakEvenWinRate === null ? $t('Not attainable under these assumptions') : fmt(executionPreview.breakEvenWinRate, 2) + '%' }}</p>
+          <details><summary>{{ $t('Preview assumptions and units') }}</summary>
           <p>{{ $t('Base-margin estimate only. Risk caps and contract rounding may reduce size. Fees use equal entry/exit notional; spread, slippage and funding are excluded.') }}</p>
-          <p v-if="executionPreview.belowCosts" class="error-message" role="status">{{ $t('Gross TP is below estimated fees: a TP exit can still be a net loss.') }}</p>
-          <p>{{ $t('Estimated net TP / SL') }}: {{ fmt(executionPreview.netTp, 6) }} / {{ fmt(executionPreview.netSl, 6) }} USDT · {{ $t('Break-even win rate') }}: {{ executionPreview.breakEvenWinRate === null ? $t('Not attainable under these assumptions') : fmt(executionPreview.breakEvenWinRate, 2) + '%' }}</p>
           <p>{{ $t('Binary TP/SL outcomes at target prices, equal entry/exit notional fees; excludes slippage, spread, funding and latency overshoot. Not a profitability forecast.') }}</p>
-          <p v-if="form.execution_mode === 'paper' && executionPreview.lossLimitsExceedEquity" class="error-message">{{ $t('A loss limit exceeds configured paper equity; it may not protect the account before capital is exhausted. Existing sessions use their frozen initial equity.') }}</p>
           <p>{{ $t('Percent units: 0.1 means 0.1%, not 10%. TP/SL use gross PnL; closed results include fees.') }}</p>
+          </details>
+          <p v-if="form.execution_mode === 'paper' && executionPreview.lossLimitsExceedEquity" class="workspace-notice compact-alert">{{ $t('A loss limit exceeds configured paper equity; it may not protect the account before capital is exhausted. Existing sessions use their frozen initial equity.') }}</p>
         </div>
         <div class="workspace-notice neutral config-group-title">{{ $t('Live activation unavailable in this workspace') }}</div>
         <label>{{ $t("Execution mode") }}<select v-model="form.execution_mode" :disabled="Boolean(openPosition)">
@@ -961,7 +986,7 @@ export default {
           </select>
         </label>
         <label>{{ $t("Symbol") }}<select v-model.number="form.trading_pair_id" :disabled="!form.exchange_id || !pairOptions.length" @change="onPairChange">
-            <option :value="null" disabled>{{ form.exchange_id && !pairOptions.length ? 'No active trading pairs for this exchange' : 'Select pair' }}</option>
+            <option :value="null" disabled>{{ $t(form.exchange_id && !pairOptions.length ? 'No active trading pairs for this exchange' : 'Select pair') }}</option>
             <option v-for="pair in pairOptions" :key="pair.id" :value="pair.id">{{ pair.pair }}</option>
           </select>
         </label>
@@ -973,6 +998,7 @@ export default {
         <label>{{ $t("Max position margin USDT") }}<input v-model.number="form.max_position_margin_usdt" type="number" min="0.01" step="0.01"/></label>
         <label>{{ $t("Max consecutive losses") }}<input v-model.number="form.max_consecutive_losses" type="number" min="1"/></label>
         <label class="checkbox-label"><input v-model="form.emergency_entry_block" type="checkbox"/>{{ $t("Block new entries") }}</label>
+        <h4 class="config-group-title">{{ $t('Paper execution & session') }}<small>{{ $t('Latency and costs are simulation assumptions, not exchange guarantees.') }}</small></h4>
         <label>{{ $t("Paper taker fee %") }}<input v-model.number="form.paper_taker_fee_percent" type="number" min="0" step="0.01"/></label>
         <label>{{ $t("Fixed paper latency ms") }}<input v-model.number="form.paper_latency_ms" type="number" min="0"/></label>
         <label>{{ $t('Pending entry TTL seconds') }}<input v-model.number="form.pending_entry_ttl_seconds" type="number" min="0.1" max="3600" step="0.1"/></label>
@@ -981,6 +1007,7 @@ export default {
           <p>{{ $t('Paper session') }}: {{ config?.paper_session_id || $t('Legacy paper history') }}</p>
           <button :disabled="actionLoading.newPaperSession || formDirty || config?.execution_mode !== 'paper' || statePayload?.enabled !== false || !!openPosition || !!statePayload?.pending_order" @click="newPaperSession">{{ $t('New paper session') }}</button>
         </div>
+        <h4 class="config-group-title">{{ $t('Exits & loss limits') }}<small>{{ $t('TP and SL are percentages of margin, not price movement.') }}</small></h4>
         <label>{{ $t("TP % of margin") }}<input v-model.number="form.take_profit_percent_of_margin" type="number" step="0.1"/></label>
         <label>{{ $t("SL % of margin") }}<input v-model.number="form.stop_loss_percent_of_margin" type="number" step="0.1"/></label>
         <label>{{ $t("Max daily loss") }}<input v-model.number="form.max_daily_loss_usdt" type="number"/></label>
@@ -1046,12 +1073,14 @@ export default {
         </div></details>
       </div>
       <ul v-if="validationErrors.length" role="alert" class="workspace-notice"><li v-for="error in validationErrors" :key="error">{{ $t(error) }}</li></ul>
-      <div class="action-row">
+      <div class="action-row settings-save-bar" v-if="formDirty">
+        <div><strong>{{ $t('Unsaved draft') }}</strong><small>{{ reviewedChanges.length }} {{ $t('settings changed') }} · {{ $t('Review values before saving') }}</small></div>
         <button class="primary-button" :disabled="actionLoading.saveConfig || !formDirty" @click="reviewSettings"><i class="fa-solid fa-list-check" aria-hidden="true"></i>{{ $t('Review changes') }}</button>
       </div>
     </section>
 
-    <section class="recovery-section" v-if="section === 'settings'">
+    <details class="system-details" v-if="section === 'settings'"><summary>{{ $t('Runtime state & manual recovery controls') }}</summary>
+    <section class="recovery-section">
       <h3>{{ $t("State") }}</h3>
       <div class="metric-grid">
         <div><span>{{ $t("Base margin") }}</span><strong>{{ fmt(config?.base_margin_usdt, 2) }}{{ $t("USDT") }}</strong></div>
@@ -1060,14 +1089,14 @@ export default {
         <div><span>{{ $t("Live max margin") }}</span><strong>{{ fmt(config?.live_max_margin_usdt, 2) }}{{ $t("USDT") }}</strong></div>
         <div><span>{{ $t("Estimated notional") }}</span><strong>{{ fmt(estimatedNotional, 2) }}{{ $t("USDT") }}</strong></div>
         <div><span>{{ $t("Consecutive losses") }}</span><strong>{{ recoveryState.consecutive_losses ?? 0 }}</strong></div>
-        <div><span>{{ $t("Status") }}</span><strong>{{ debug?.status || statePayload?.status || (recoveryState.is_stopped ? 'stopped' : (config?.enabled ? 'running' : 'stopped')) }}</strong></div>
-        <div><span>{{ $t("Enabled") }}</span><strong>{{ config?.enabled ? 'true' : 'false' }}</strong></div>
+        <div><span>{{ $t("Status") }}</span><strong>{{ $t(debug?.status || statePayload?.status || (recoveryState.is_stopped ? 'stopped' : (config?.enabled ? 'running' : 'stopped'))) }}</strong></div>
+        <div><span>{{ $t("Enabled") }}</span><strong>{{ $t(config?.enabled ? 'Yes' : 'No') }}</strong></div>
         <div><span>{{ $t("Exchange") }}</span><strong>{{ config?.exchange || '-' }}</strong></div>
         <div><span>{{ $t("Symbol") }}</span><strong>{{ config?.symbol || '-' }}</strong></div>
         <div><span>{{ $t("Total PnL") }}</span><strong>{{ fmt(metrics?.total_pnl, 2) }}{{ $t("USDT") }}</strong></div>
         <div><span>{{ $t("Win rate") }}</span><strong>{{ fmt(metrics?.win_rate, 2) }}%</strong></div>
         <div><span>{{ $t("Max drawdown") }}</span><strong>{{ fmt(metrics?.max_drawdown, 2) }}{{ $t("USDT") }}</strong></div>
-        <div><span>{{ $t("Stop reason") }}</span><strong>{{ recoveryState.stop_reason || '-' }}</strong></div>
+        <div><span>{{ $t("Stop reason") }}</span><strong>{{ $t(recoveryState.stop_reason || '-') }}</strong></div>
         <div><span>{{ $t("Paused until") }}</span><strong>{{ dt(recoveryState.paused_until) }}</strong></div>
         <div><span>{{ $t("Manual reset at") }}</span><strong>{{ dt(recoveryState.last_manual_recovery_reset_at) }}</strong></div>
         <div><span>{{ $t("Manual margin at") }}</span><strong>{{ dt(recoveryState.last_manual_margin_override_at) }}</strong></div>
@@ -1075,10 +1104,11 @@ export default {
       </div>
       <div class="action-row">
         <button :disabled="Boolean(openPosition) || actionLoading.resetRecovery" @click="resetRecovery"><i class="fa-solid fa-rotate-left"></i> {{ $t(actionLoading.resetRecovery ? 'Resetting...' : 'Reset recovery to base margin') }}</button>
-        <input v-model.number="manualMarginValue" :disabled="Boolean(openPosition)" min="0" step="0.1" type="number" placeholder="Current margin USDT"/>
+        <input v-model.number="manualMarginValue" :disabled="Boolean(openPosition)" min="0" step="0.1" type="number" :placeholder="$t('Current margin USDT')" :aria-label="$t('Current margin USDT')"/>
         <button :disabled="Boolean(openPosition) || actionLoading.setCurrentMargin" @click="setCurrentMargin"><i class="fa-solid fa-sliders"></i> {{ $t(actionLoading.setCurrentMargin ? 'Saving...' : 'Set current margin') }}</button>
       </div>
     </section>
+    </details>
 
     <details class="system-details" v-if="section === 'overview'"><summary>{{ $t('System & diagnostics') }}</summary>
     <section class="recovery-section">
@@ -1174,9 +1204,8 @@ export default {
 
     <section v-if="section === 'research'" class="recovery-section">
       <h3>{{ $t('Replay & collection') }} <span class="status-badge">{{ $t('Inconclusive') }}</span></h3>
-      <p class="workspace-notice neutral">{{ $t('Collection and depth replay are CLI-only. This API does not expose collection jobs or replay reports. Dataset rows below are not replay trades.') }}</p>
-      <p>{{ $t('Use the frozen protocol and separate chronological development/evaluation files. Do not tune on evaluation data.') }}</p>
-      <details><summary>{{ $t('Historical research') }}</summary><div class="workspace-tabs"><router-link to="/research/legacy">{{ $t("FuturesTrend /") }}{{ $t('Research') }}</router-link><router-link to="/futures">{{ $t("FuturesTrend / Paper") }}</router-link><router-link to="/paper-trading">{{ $t('Closed history') }}{{ $t("/ Paper") }}</router-link></div></details>
+      <p class="section-help">{{ $t('Collection and depth replay are CLI-only. This API does not expose collection jobs or replay reports. Dataset rows below are not replay trades.') }}</p>
+      <details><summary>{{ $t('Protocol & historical research') }}</summary><p class="section-help">{{ $t('Use the frozen protocol and separate chronological development/evaluation files. Do not tune on evaluation data.') }}</p><div class="workspace-tabs"><router-link to="/research/legacy">{{ $t("FuturesTrend /") }}{{ $t('Research') }}</router-link><router-link to="/futures">{{ $t("FuturesTrend / Paper") }}</router-link><router-link to="/paper-trading">{{ $t('Closed history') }}{{ $t("/ Paper") }}</router-link></div></details>
     </section>
     <section class="recovery-section" v-if="section === 'research'">
       <h3>{{ $t("ML Market Snapshot Statistics") }}</h3>
@@ -1208,7 +1237,7 @@ export default {
             @click="setMlExplorerTab(tab.key)"
         >{{ $t(tab.label) }}</button>
       </div>
-      <div class="ml-filter-grid">
+      <details class="dataset-filters"><summary>{{ $t('Filters & sort') }}</summary><div class="ml-filter-grid">
         <label>{{ $t("Symbol") }}<input v-model="mlExplorer.filters.symbol" placeholder="TON/USDT"/></label>
         <label>{{ $t("Exchange") }}<input v-model="mlExplorer.filters.exchange" placeholder="Mexc"/></label>
         <label>{{ $t("Date from") }}<input v-model="mlExplorer.filters.date_from" type="datetime-local"/></label>
@@ -1255,6 +1284,7 @@ export default {
           </select>
         </label>
       </div>
+      </details>
       <div class="action-row">
         <button @click="applyMlExplorerFilters"><i class="fa-solid fa-filter"></i>{{ $t("Apply filters") }}</button>
         <button @click="resetMlExplorerFilters"><i class="fa-solid fa-eraser"></i>{{ $t("Reset") }}</button>
@@ -1274,7 +1304,7 @@ export default {
       <div class="empty-row" v-if="mlExplorer.loading">{{ $t("Loading ML dataset...") }}</div>
       <div class="recovery-table recovery-table--ml" v-else>
         <div class="recovery-row recovery-row--head recovery-row--ml" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}">
-          <span v-for="column in activeMlExplorerColumns" :key="column">{{ column.replaceAll('_', ' ') }}</span>
+          <span v-for="column in activeMlExplorerColumns" :key="column">{{ datasetColumnLabel(column) }}</span>
         </div>
         <button class="recovery-row recovery-row--ml recovery-row--clickable" :style="{gridTemplateColumns: `repeat(${activeMlExplorerColumns.length}, minmax(110px, 1fr))`}" v-for="row in activeMlExplorerData.items" :key="`${mlExplorer.active}-${row.id}`" @click="openMlExplorerDetail(row)">
           <span v-for="column in activeMlExplorerColumns" :key="column" :class="{'status-pill': ['label_status', 'result', 'final_side', 'proposed_side'].includes(column), [mlExplorerBadgeTone(row[column])]: ['label_status', 'result', 'final_side', 'proposed_side'].includes(column)}">{{ mlExplorerCell(row, column) }}</span>
@@ -1282,13 +1312,14 @@ export default {
         <div class="empty-row" v-if="!activeMlExplorerData.items.length">{{ $t("No ML dataset rows found") }}</div>
       </div>
       <div class="pagination-row">
-        <button :disabled="activeMlExplorerData.page <= 1" @click="changeMlExplorerPage(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+        <button :aria-label="$t('Previous page')" :disabled="activeMlExplorerData.page <= 1" @click="changeMlExplorerPage(-1)"><i class="fa-solid fa-chevron-left"></i></button>
         <span>{{ $t("Page") }}{{ activeMlExplorerData.page }} / {{ activeMlExplorerData.total_pages || 1 }} · {{ activeMlExplorerData.total }}{{ $t("rows") }}</span>
-        <button :disabled="activeMlExplorerData.page >= activeMlExplorerData.total_pages" @click="changeMlExplorerPage(1)"><i class="fa-solid fa-chevron-right"></i></button>
+        <button :aria-label="$t('Next page')" :disabled="activeMlExplorerData.page >= activeMlExplorerData.total_pages" @click="changeMlExplorerPage(1)"><i class="fa-solid fa-chevron-right"></i></button>
       </div>
     </section>
 
-    <section class="recovery-section" v-if="section === 'research'">
+    <details class="system-details research-diagnostics" v-if="section === 'research'"><summary>{{ $t('Signal Diagnostics') }}<span>{{ $t('Rejections, counters and feature export') }}</span></summary>
+    <section class="recovery-section">
       <div class="section-title">
         <h3>{{ $t("Signal Diagnostics") }}</h3>
         <button @click="clearDiagnostics"><i class="fa-solid fa-broom"></i>{{ $t("Clear diagnostics") }}</button>
@@ -1322,7 +1353,7 @@ export default {
       </div>
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head recovery-row--signal-diagnostics"><span>{{ $t("Time") }}</span><span>{{ $t("Median") }}</span><span>{{ $t("Momentum") }}</span><span>{{ $t("Long") }}</span><span>{{ $t("Short") }}</span><span>{{ $t("L ratio") }}</span><span>{{ $t("S ratio") }}</span><span>{{ $t("Proposed") }}</span><span>{{ $t("Final") }}</span><span>{{ $t("ML score") }}</span><span>{{ $t("ML decision") }}</span><span>{{ $t("Short hit") }}</span><span>{{ $t("Cfg L/S") }}</span><span>{{ $t("Short blocks") }}</span><span>{{ $t("Why long") }}</span><span>{{ $t("Why short rejected") }}</span><span>{{ $t("Skip") }}</span><span>{{ $t("Reject") }}</span><span>{{ $t("L win") }}</span><span>{{ $t("S win") }}</span></div>
-        <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in (debug?.signal_diagnostics_last_100 || [])" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
+        <div class="recovery-row recovery-row--signal-diagnostics" v-for="row in signalPageData.items" :key="`${row.timestamp}-${row.proposed_side}-${row.final_side}`">
           <span>{{ dt(row.timestamp) }}</span>
           <span>{{ fmt(row.median_imbalance, 4) }}</span>
           <span>{{ fmt(row.momentum, 8) }}</span>
@@ -1330,8 +1361,8 @@ export default {
           <span>{{ row.short_confirms ?? '-' }}</span>
           <span>{{ fmt(row.long_ratio, 2) }}</span>
           <span>{{ fmt(row.short_ratio, 2) }}</span>
-          <span>{{ row.proposed_side || 'none' }}</span>
-          <span>{{ row.final_side || 'none' }}</span>
+          <span>{{ $t(row.proposed_side || 'none') }}</span>
+          <span>{{ $t(row.final_side || 'none') }}</span>
           <span>{{ row.ml_score ?? '-' }}</span>
           <span>{{ row.ml_decision || '-' }}</span>
           <span>{{ row.short_threshold_hit ? 'yes' : 'no' }}</span>
@@ -1346,7 +1377,9 @@ export default {
         </div>
         <div class="empty-row" v-if="!(debug?.signal_diagnostics_last_100 || []).length">{{ $t("No signal diagnostics yet") }}</div>
       </div>
+      <div class="pagination-row"><button :aria-label="$t('Previous page')" :disabled="signalPageData.page <= 1" @click="signalPage = signalPageData.page - 1"><i class="fa-solid fa-chevron-left"></i></button><span>{{ $t('Page') }} {{ signalPageData.page }} / {{ signalPageData.pages }} · {{ signalPageData.total }} {{ $t('rows') }}</span><button :aria-label="$t('Next page')" :disabled="signalPageData.page >= signalPageData.pages" @click="signalPage = signalPageData.page + 1"><i class="fa-solid fa-chevron-right"></i></button></div>
     </section>
+    </details>
 
     <section class="recovery-section" v-if="section === 'overview'">
       <h3>{{ $t("Multi-exchange consensus") }}</h3>
@@ -1354,15 +1387,15 @@ export default {
         <div class="recovery-row recovery-row--head recovery-row--consensus"><span>{{ $t("Exchange") }}</span><span>{{ $t("Valid") }}</span><span>{{ $t("Imbalance") }}</span><span>{{ $t("Raw imbalance") }}</span><span>{{ $t("Anomaly") }}</span><span>{{ $t("Spread %") }}</span><span>{{ $t("Momentum") }}</span><span>{{ $t("Long") }}</span><span>{{ $t("Short") }}</span><span>{{ $t("Reject reason") }}</span></div>
         <div class="recovery-row recovery-row--consensus" v-for="row in (debug?.per_exchange_features || [])" :key="`${row.exchange}-${row.symbol}`">
           <span>{{ row.exchange }}</span>
-          <span>{{ row.valid ? 'yes' : 'no' }}</span>
+          <span>{{ $t(row.valid ? 'yes' : 'no') }}</span>
           <span>{{ fmt(row.imbalance, 4) }}</span>
           <span>{{ fmt(row.raw_imbalance, 4) }}</span>
-          <span>{{ row.is_imbalance_anomaly ? 'yes' : 'no' }}</span>
+          <span>{{ $t(row.is_imbalance_anomaly ? 'yes' : 'no') }}</span>
           <span>{{ fmt(row.spread_percent, 4) }}</span>
           <span>{{ fmt(row.momentum, 8) }}</span>
-          <span>{{ row.long_signal ? 'yes' : 'no' }}</span>
-          <span>{{ row.short_signal ? 'yes' : 'no' }}</span>
-          <span>{{ row.reject_reason || '-' }}</span>
+          <span>{{ $t(row.long_signal ? 'yes' : 'no') }}</span>
+          <span>{{ $t(row.short_signal ? 'yes' : 'no') }}</span>
+          <span>{{ $t(row.reject_reason || '-') }}</span>
         </div>
         <div class="empty-row" v-if="!(debug?.per_exchange_features || []).length">{{ $t("No consensus snapshots yet") }}</div>
       </div>
@@ -1376,7 +1409,7 @@ export default {
         <div class="recovery-row recovery-row--scanner" v-for="row in scannerDiagnostics" :key="`${row.exchange}-${row.symbol}`">
           <span>{{ row.exchange }}</span>
           <span>{{ row.symbol }}</span>
-          <span :class="['result-pill', scannerStatusTone(row.status)]">{{ row.status || '-' }}</span>
+          <span :class="['result-pill', scannerStatusTone(row.status)]">{{ $t(row.status || '-') }}</span>
           <span>{{ fmt(row.latency_ms, 1) }}{{ $t("ms") }}</span>
           <span>{{ fmt(row.stale_seconds, 2) }}</span>
           <span>{{ dt(row.last_success_at) }}</span>
@@ -1389,12 +1422,12 @@ export default {
     </section>
 
     </details>
-    <section class="recovery-section" v-if="['overview', 'positions'].includes(section)">
+    <section class="recovery-section position-section" v-if="['overview', 'positions'].includes(section)">
       <h3>{{ $t("Open Position") }}</h3>
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head"><span>{{ $t("Side") }}</span><span>{{ $t("Margin") }}</span><span>{{ $t("Notional") }}</span><span>{{ $t("Entry") }}</span><span>{{ $t("PnL") }}</span></div>
         <div class="recovery-row" v-if="openPosition">
-          <span>{{ openPosition.side }}</span>
+          <span>{{ $t(openPosition.side) }}</span>
           <span>{{ fmt(openPosition.margin, 2) }}</span>
           <span>{{ fmt(openPosition.notional, 2) }}</span>
           <span>{{ fmt(openPosition.entry_price, 4) }}</span>
@@ -1421,8 +1454,8 @@ export default {
       <div class="action-row">
         <label>{{ $t('Mode') }}<select v-model="historyMode"><option value="all">{{ $t('All modes') }}</option><option value="paper">{{ $t("Paper") }}</option><option value="live">{{ $t("Live") }}</option></select></label>
         <label class="check-row"><input :checked="showArchived" type="checkbox" @change="setShowArchived"/>{{ $t("Show archived trades") }}</label>
-        <button :disabled="actionLoading['exportTrades:csv']" @click="exportTrades('csv')"><i class="fa-solid fa-file-csv"></i> {{ actionLoading['exportTrades:csv'] ? 'Exporting...' : 'Export non-archived trades' }}</button>
-        <button :disabled="actionLoading['exportTrades:json']" @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> {{ actionLoading['exportTrades:json'] ? 'Exporting...' : 'Export JSON' }}</button>
+        <button :disabled="actionLoading['exportTrades:csv']" @click="exportTrades('csv')"><i class="fa-solid fa-file-csv"></i> {{ $t(actionLoading['exportTrades:csv'] ? 'Exporting...' : 'Export non-archived trades') }}</button>
+        <button :disabled="actionLoading['exportTrades:json']" @click="exportTrades('json')"><i class="fa-solid fa-file-code"></i> {{ $t(actionLoading['exportTrades:json'] ? 'Exporting...' : 'Export JSON') }}</button>
       </div>
       <details class="history-tools"><summary>{{ $t('Archive management') }}</summary><div class="action-row">
         <button :disabled="actionLoading.archiveAllClosed" @click="archiveAllClosed"><i class="fa-solid fa-box-archive"></i> {{ $t(actionLoading.archiveAllClosed ? 'Archiving...' : 'Archive all closed trades') }}</button>
@@ -1439,22 +1472,22 @@ export default {
       <div class="recovery-table">
         <div class="recovery-row recovery-row--head recovery-row--trades"><span>{{ $t("ID") }}</span><span>{{ $t("Mode") }}</span><span>{{ $t("Side") }}</span><span>{{ $t("Step") }}</span><span>{{ $t("Margin") }}</span><span>{{ $t("Entry") }}</span><span>{{ $t("Exit") }}</span><span>{{ $t("PnL") }}</span><span>{{ $t("Result") }}</span><span>{{ $t("Live") }}</span><span>{{ $t("Protection") }}</span><span>{{ $t("Action") }}</span></div>
         <div class="empty-row" v-if="!visibleTrades.length">{{ $t('No trades in this mode') }}</div>
-        <div class="recovery-row recovery-row--trades" v-for="trade in visibleTrades" :key="trade.id">
-          <span data-label="ID">#{{ trade.id }}</span>
-          <span data-label="Mode"><span :class="['mode-badge', String(trade.execution_mode || 'paper').toLowerCase() === 'live' ? 'live' : 'paper']">{{ trade.execution_mode || 'paper' }}</span></span>
-          <span data-label="Side"><span :class="['side-badge', String(trade.side || '').toLowerCase()]">{{ trade.side }}</span></span>
-          <span data-label="Step">{{ trade.recovery_step }}</span>
-          <span data-label="Margin">{{ fmt(trade.margin, 2) }}</span>
-          <span data-label="Entry">{{ fmt(trade.entry_price, 4) }}</span>
-          <span data-label="Exit">{{ fmt(trade.exit_price, 4) }}</span>
-          <span data-label="PnL" :class="['pnl-badge', resultTone(trade)]">
+        <div class="recovery-row recovery-row--trades" v-for="trade in historyPageData.items" :key="trade.id">
+          <span :data-label="$t('ID')">#{{ trade.id }}</span>
+          <span :data-label="$t('Mode')"><span :class="['mode-badge', String(trade.execution_mode || 'paper').toLowerCase() === 'live' ? 'live' : 'paper']">{{ $t(trade.execution_mode || 'paper') }}</span></span>
+          <span :data-label="$t('Side')"><span :class="['side-badge', String(trade.side || '').toLowerCase()]">{{ $t(trade.side) }}</span></span>
+          <span :data-label="$t('Step')">{{ trade.recovery_step }}</span>
+          <span :data-label="$t('Margin')">{{ fmt(trade.margin, 2) }}</span>
+          <span :data-label="$t('Entry')">{{ fmt(trade.entry_price, 4) }}</span>
+          <span :data-label="$t('Exit')">{{ fmt(trade.exit_price, 4) }}</span>
+          <span :data-label="$t('PnL')" :class="['pnl-badge', resultTone(trade)]">
             <strong>{{ moneyResult(trade.pnl) }}</strong>
             <small>{{ $t(pnlEvidence(trade)) }}</small>
           </span>
-          <span data-label="Result"><span :class="['status-badge', resultTone(trade)]">{{ $t(resultLabel(trade)) }}</span></span>
-          <span data-label="Live"><span :class="['status-badge', liveStatusTone(trade.live_status)]">{{ $t(formatLiveStatus(trade.live_status)) }}</span></span>
-          <span data-label="Protection"><span :class="['status-badge', protectionTone(trade)]">{{ $t(formatProtectionStatus(trade)) }}</span></span>
-          <span class="trade-actions" data-label="Action">
+          <span :data-label="$t('Result')"><span :class="['status-badge', resultTone(trade)]">{{ $t(resultLabel(trade)) }}</span></span>
+          <span :data-label="$t('Live')"><span :class="['status-badge', liveStatusTone(trade.live_status)]">{{ $t(formatLiveStatus(trade.live_status)) }}</span></span>
+          <span :data-label="$t('Protection')"><span :class="['status-badge', protectionTone(trade)]">{{ $t(formatProtectionStatus(trade)) }}</span></span>
+          <span class="trade-actions" :data-label="$t('Action')">
             <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ $t(formatWarningSummary(trade)) }}</span>
             <button @click="viewDetails(trade)">{{ $t("View Details") }}</button>
             <button v-if="trade.closed_at && !trade.is_archived" :disabled="actionLoading[`archiveTrade:${trade.id}`]" @click="archiveTrade(trade)">{{ $t("Archive") }}</button>
@@ -1462,6 +1495,7 @@ export default {
           </span>
         </div>
       </div>
+      <div class="pagination-row"><label>{{ $t('Page size') }} <select v-model.number="historyPageSize" @change="historyPage = 1"><option :value="20">20</option><option :value="50">50</option></select></label><button :aria-label="$t('Previous page')" :disabled="historyPageData.page <= 1" @click="historyPage = historyPageData.page - 1"><i class="fa-solid fa-chevron-left"></i></button><span>{{ $t('Page') }} {{ historyPageData.page }} / {{ historyPageData.pages }} · {{ historyPageData.total }} {{ $t('loaded trades') }}</span><button :aria-label="$t('Next page')" :disabled="historyPageData.page >= historyPageData.pages" @click="historyPage = historyPageData.page + 1"><i class="fa-solid fa-chevron-right"></i></button></div>
     </section>
 
     <div class="details-backdrop" v-if="reviewOpen" @click.self="reviewOpen = false" @keydown.esc="reviewOpen = false">
@@ -1469,7 +1503,7 @@ export default {
         <div class="details-header"><h3>{{ $t('Review before saving') }}</h3><button autofocus @click="reviewOpen = false">{{ $t('Cancel') }}</button></div>
         <p>{{ form.exchange }} · {{ form.symbol }} · {{ form.execution_mode }}</p>
         <p>{{ $t('Estimated notional') }}: {{ fmt(Number(form.base_margin_usdt) * Number(form.leverage), 2) }}{{ $t("USDT") }}</p>
-        <table class="review-table"><thead><tr><th>{{ $t('Field') }}</th><th>{{ $t('Current') }}</th><th>{{ $t('Proposed') }}</th></tr></thead><tbody><tr v-for="change in reviewedChanges" :key="change.key"><td>{{ change.key }}</td><td>{{ String(change.before ?? '—') }}</td><td>{{ String(change.after ?? '—') }}</td></tr></tbody></table>
+        <table class="review-table"><thead><tr><th>{{ $t('Field') }}</th><th>{{ $t('Current') }}</th><th>{{ $t('Proposed') }}</th></tr></thead><tbody><tr v-for="change in reviewedChanges" :key="change.key"><td>{{ settingLabel(change.key) }}<small class="technical-key">{{ change.key }}</small></td><td>{{ settingValue(change.before) }}</td><td>{{ settingValue(change.after) }}</td></tr></tbody></table>
         <div class="action-row"><button class="primary-button" :disabled="actionLoading.saveConfig" @click="saveConfig">{{ $t('Save changes') }}</button><button @click="reviewOpen = false">{{ $t('Cancel') }}</button></div>
       </div>
     </div>
@@ -1478,7 +1512,7 @@ export default {
         <div class="details-header">
           <div>
             <h3>{{ $t("ML Dataset Details") }}</h3>
-            <p>{{ mlExplorerDetail.dataset.replaceAll('_', ' ') }} #{{ mlExplorerDetail.item?.id }}</p>
+            <p>{{ $t(mlExplorerTabs.find(tab => tab.key === mlExplorerDetail.dataset)?.label || mlExplorerDetail.dataset) }} #{{ mlExplorerDetail.item?.id }}</p>
           </div>
           <div class="action-row">
             <button @click="copyMlExplorerJson"><i class="fa-solid fa-copy"></i>{{ $t("Copy JSON") }}</button>
@@ -1536,10 +1570,10 @@ export default {
             </div>
           </div>
         </div>
-        <div class="details-section">
-          <h4>{{ $t("Raw JSON") }}</h4>
+        <details class="details-section">
+          <summary>{{ $t("Raw JSON") }}</summary>
           <pre class="raw-block">{{ JSON.stringify(mlExplorerDetail.item, null, 2) }}</pre>
-        </div>
+        </details>
       </div>
     </div>
 
@@ -1554,8 +1588,8 @@ export default {
           <h4>{{ $t("Trade summary") }}</h4>
           <div class="metric-grid">
             <div><span>{{ $t("Trade") }}</span><strong>#{{ detail('summary.id') }}</strong></div>
-            <div><span>{{ $t("Mode") }}</span><strong>{{ detail('trade.execution_mode', 'paper') }}</strong></div>
-            <div><span>{{ $t("Side") }}</span><strong>{{ detail('summary.side') }}</strong></div>
+            <div><span>{{ $t("Mode") }}</span><strong>{{ $t(detail('trade.execution_mode', 'Unknown')) }}</strong></div>
+            <div><span>{{ $t("Side") }}</span><strong>{{ $t(detail('summary.side')) }}</strong></div>
             <div><span>{{ $t("Exchange") }}</span><strong>{{ detail('summary.exchange') }}</strong></div>
             <div><span>{{ $t("Symbol") }}</span><strong>{{ detail('summary.symbol') }}</strong></div>
             <div><span>{{ $t("Step") }}</span><strong>{{ detail('trade.recovery_step') }}</strong></div>
@@ -1571,10 +1605,10 @@ export default {
         <div class="detail-block">
           <h4>{{ $t("Execution") }}</h4>
           <div class="metric-grid">
-            <div><span>{{ $t("Live status") }}</span><strong>{{ formatLiveStatus(detail('trade.live_status')) }}</strong></div>
-            <div><span>{{ $t("Entry") }}</span><strong>{{ fmt(detail('summary.entry_price', 0), 6) }}</strong></div>
-            <div><span>{{ $t("Exit") }}</span><strong>{{ fmt(detail('trade.exit_price', 0), 6) }}</strong></div>
-            <div><span>{{ $t("Filled amount") }}</span><strong>{{ fmt(detail('trade.live_filled_amount', 0), 8) }}</strong></div>
+            <div><span>{{ $t("Live status") }}</span><strong>{{ $t(formatLiveStatus(detail('trade.live_status'))) }}</strong></div>
+            <div><span>{{ $t("Entry") }}</span><strong>{{ fmt(detail('summary.entry_price', null), 6) }}</strong></div>
+            <div><span>{{ $t("Exit") }}</span><strong>{{ fmt(detail('trade.exit_price', null), 6) }}</strong></div>
+            <div><span>{{ $t("Filled amount") }}</span><strong>{{ fmt(detail('trade.live_filled_amount', null), 8) }}</strong></div>
             <div><span>{{ $t("Open order ID") }}</span><strong>{{ formatOrderId(detail('trade.live_exchange_order_id')) }}</strong></div>
             <div><span>{{ $t("Close order ID") }}</span><strong>{{ formatOrderId(detail('trade.live_close_order_id')) }}</strong></div>
             <div><span>{{ $t("Live error") }}</span><strong>{{ detail('trade.live_error') || '-' }}</strong></div>
@@ -1587,8 +1621,8 @@ export default {
             <div><span>{{ $t("Status") }}</span><strong>{{ $t(formatProtectionStatus(detail('trade', {}))) }}</strong></div>
             <div><span>{{ $t('Last protection check') }}</span><strong>{{ dt(detail('trade.protection_checked_at', null)) }}</strong></div>
             <div><span>{{ $t('Protection expiry') }}</span><strong>{{ dt(detail('trade.protection_expires_at', null)) }}</strong></div>
-            <div><span>{{ $t("TP price") }}</span><strong>{{ fmt(detail('trade.exchange_tp_price', 0), 6) }}</strong></div>
-            <div><span>{{ $t("SL price") }}</span><strong>{{ fmt(detail('trade.exchange_sl_price', 0), 6) }}</strong></div>
+            <div><span>{{ $t("TP price") }}</span><strong>{{ fmt(detail('trade.exchange_tp_price', null), 6) }}</strong></div>
+            <div><span>{{ $t("SL price") }}</span><strong>{{ fmt(detail('trade.exchange_sl_price', null), 6) }}</strong></div>
             <div><span>{{ $t("TP order ID") }}</span><strong>{{ formatOrderId(detail('trade.exchange_tp_order_id')) }}</strong></div>
             <div><span>{{ $t("SL order ID") }}</span><strong>{{ formatOrderId(detail('trade.exchange_sl_order_id')) }}</strong></div>
             <div><span>{{ $t("Created at") }}</span><strong>{{ dt(detail('trade.tp_sl_created_at')) }}</strong></div>
@@ -1616,7 +1650,7 @@ export default {
           <h4>{{ $t("Reconciliation") }}</h4>
           <div class="metric-grid">
             <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
-            <div><span>{{ $t("Exit fallback used") }}</span><strong>{{ detail('trade.exit_price_fallback_used') ? 'Yes' : 'No' }}</strong></div>
+            <div><span>{{ $t("Exit fallback used") }}</span><strong>{{ $t(detail('trade.exit_price_fallback_used') ? 'Yes' : 'No') }}</strong></div>
             <div><span>{{ $t("Exit warning") }}</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
             <div><span>{{ $t('Legacy reconciliation') }}</span><strong>{{ detail('trade.legacy_reconciliation_status') || '-' }}</strong></div>
           </div>

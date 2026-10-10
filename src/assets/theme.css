@@ -86,3 +86,104 @@ html[data-theme] .futures-shell :is(.color-green,.c-green) {color: var(--success
 html[data-theme] .futures-shell :is(.color-red,.c-red) {color: var(--danger-text) !important;}
 @media(max-width:1200px) {.workspace-header {height: auto; min-height: 68px; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px;}.header-tools {flex-wrap: wrap;}}
 @media(max-width:720px) {.header-tools {width: 100%;}.feed-status {flex: 1 0 100%;}.theme-control {flex: 1;}.theme-control select {min-width: 0; flex: 1;}}
+
+/* Dashboard hierarchy uses the same palette in both themes. */
+html[data-theme] .futures-shell #main-content {max-width: 1680px; padding-top: 28px;}
+html[data-theme] .futures-shell .recovery-page {gap: 20px; overflow: visible;}
+html[data-theme] .futures-shell .recovery-page > .recovery-section {overflow: visible;}
+html[data-theme] .futures-shell .workspace-page-heading {padding-bottom: 4px;}
+html[data-theme] .futures-shell h1 {font-size: 26px; font-weight: 650;}
+html[data-theme] .futures-shell .workspace-eyebrow {font-size: 10px; margin-bottom: 8px;}
+html[data-theme] .futures-shell .section-help {font-size: 12px; line-height: 1.6; max-width: 88ch; color: var(--text-secondary); margin: 8px 0 16px;}
+html[data-theme] .futures-shell .action-row {display: flex; flex-wrap: wrap; align-items: center; gap: 8px;}
+html[data-theme] .futures-shell .action-row button {min-height: 36px;}
+html[data-theme] .futures-shell :is(.summary-card > span,.metric-grid span) {text-transform: none;}
+html[data-theme] .futures-shell .compact-alert {padding: 9px 12px; margin: 0; font-size: 12px; line-height: 1.5; border-width: 1px;}
+html[data-theme] .futures-shell .compact-alert li {margin: 2px 0;}
+html[data-theme] .futures-shell .inline-status,
+html[data-theme] .futures-shell .pending-summary {display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary);}
+html[data-theme] .futures-shell .runtime-diagnostics {order: 20;}
+html[data-theme] .futures-shell .position-section {order: -1;}
+html[data-theme] .futures-shell .workspace-page-heading,
+html[data-theme] .futures-shell #start-block-reasons,
+html[data-theme] .futures-shell .summary-grid,
+html[data-theme] .futures-shell .compact-alert,
+html[data-theme] .futures-shell .pending-summary {order: -2;}
+html[data-theme] .futures-shell .secondary-metrics {padding: 0 0 16px;}
+html[data-theme] .futures-shell .dataset-filters {padding: 10px 0;}
+html[data-theme] .futures-shell .dataset-filters summary {cursor: pointer; font-size: 12px; font-weight: 550;}
+html[data-theme] .futures-shell .system-details {border: 1px solid var(--border-default); border-radius: 6px; padding: 0 16px; background: var(--surface-panel);}
+html[data-theme] .futures-shell .system-details > summary {padding: 14px 0; font-size: 12px; color: var(--text-primary);}
+html[data-theme] .futures-shell .system-details > summary > span {font-weight: 400; font-size: 11px; margin-left: 14px; color: var(--text-muted);}
+html[data-theme] .futures-shell .diagnostics-body {font-size: 12px; overflow-wrap: anywhere; border-top: 1px solid var(--border-default); padding: 10px 0;}
+html[data-theme] .futures-shell .diagnostics-body p {margin: 8px 0;}
+html[data-theme] .futures-shell .summary-card {border-top-width: 1px !important; padding: 18px !important; box-shadow: var(--shadow-panel) !important;}
+html[data-theme] .futures-shell .summary-card strong {font-size: 23px; font-variant-numeric: tabular-nums; font-weight: 620;}
+html[data-theme] .futures-shell .summary-card.positive strong {color: var(--success-text) !important;}
+html[data-theme] .futures-shell .summary-card.negative strong {color: var(--danger-text) !important;}
+html[data-theme] .futures-shell .summary-card small {line-height: 1.5; margin-top: 8px;}
+html[data-theme] .futures-shell .metric-grid {border-radius: 6px;}
+html[data-theme] .futures-shell .metric-grid > div {padding: 14px 16px; box-shadow: none !important;}
+html[data-theme] .futures-shell .metric-grid strong {font-variant-numeric: tabular-nums; line-height: 1.5;}
+html[data-theme] .futures-shell .recovery-form {gap: 18px 24px;}
+html[data-theme] .futures-shell .config-group-title {font-size: 14px; margin-top: 8px; padding-bottom: 12px;}
+html[data-theme] .futures-shell .config-group-title.workspace-notice {font-size: 12px; padding: 10px 12px !important; margin: 0; border-radius: 5px;}
+html[data-theme] .futures-shell .recovery-form label {font-weight: 500; gap: 7px;}
+html[data-theme] .futures-shell .recovery-form :is(input:not([type=checkbox]),select) {min-height: 40px; font-variant-numeric: tabular-nums; font-weight: 400;}
+html[data-theme] .futures-shell :is(.check-row,.checkbox-label) {background: transparent !important; border-color: transparent !important; display: flex; align-items: center; flex-wrap: nowrap; gap: 9px; padding: 0; min-height: 32px; color: var(--text-secondary) !important;}
+html[data-theme] .futures-shell input[type=checkbox] {appearance: auto; color-scheme: inherit; accent-color: var(--accent-solid); width: 16px; height: 16px; margin: 0; padding: 0 !important; min-height: 16px; border-radius: 3px; background: transparent !important; box-shadow: none !important;}
+html[data-theme] .futures-shell .cost-preview {grid-column: 1 / -1; padding: 16px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--surface-panel);}
+html[data-theme] .futures-shell .cost-preview h4 {font-size: 13px; margin: 0 0 14px;}
+html[data-theme] .futures-shell .cost-preview p {font-size: 12px; line-height: 1.6; margin: 12px 0 0;}
+html[data-theme] .futures-shell .cost-preview summary {font-size: 11px; color: var(--text-muted); margin-top: 12px; cursor: pointer;}
+html[data-theme] .futures-shell .cost-preview-grid {display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px;}
+html[data-theme] .futures-shell .cost-preview-grid > div {padding: 12px; background: var(--surface-subtle); border-radius: 4px; min-width: 0;}
+html[data-theme] .futures-shell .cost-preview-grid span {display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;}
+html[data-theme] .futures-shell .cost-preview-grid strong {font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;}
+html[data-theme] .futures-shell .cost-preview-grid small {font-size: 10px; font-weight: 400;}
+html[data-theme] .futures-shell .settings-save-bar {position: sticky; bottom: 14px; z-index: 5; justify-content: space-between; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: 6px; padding: 12px 16px; box-shadow: var(--shadow-popover); margin-top: 20px;}
+html[data-theme] .futures-shell .settings-save-bar strong {font-size: 12px;}
+html[data-theme] .futures-shell .settings-save-bar small {display: block; font-size: 11px; margin-top: 3px;}
+html[data-theme] .futures-shell .technical-key {display: block; font-size: 10px; color: var(--text-muted); margin-top: 4px;}
+html[data-theme] .futures-shell .recovery-table {max-height: 520px; overflow: auto; overscroll-behavior: contain; scrollbar-color: var(--border-strong) var(--surface-panel);}
+html[data-theme] .futures-shell .recovery-row {font-variant-numeric: tabular-nums; line-height: 1.5;}
+html[data-theme] .futures-shell .recovery-row--head {position: sticky; top: 0; z-index: 2; min-height: 44px; box-shadow: 0 1px var(--border-default);}
+html[data-theme] .futures-shell :is(.recovery-row--ml,.recovery-row--signal-diagnostics,.recovery-row--consensus,.recovery-row--scanner,.recovery-row--details) {width: max-content; min-width: 100%;}
+html[data-theme] .futures-shell .recovery-row--ml {min-width: 1050px; gap: 12px;}
+html[data-theme] .futures-shell .recovery-row--trades {grid-template-columns: 54px 66px 70px 42px 76px 98px 98px 156px 104px 116px 116px 174px; min-width: 1390px; gap: 10px;}
+html[data-theme] .futures-shell .recovery-row--trades > span:last-child {position: sticky; right: -14px; padding-left: 10px; background: var(--surface-panel); box-shadow: -1px 0 var(--border-default); z-index: 1; align-self: stretch; display: flex; align-items: center;}
+html[data-theme] .futures-shell .recovery-row > span {align-self: center; min-width: 0;}
+html[data-theme] .futures-shell :is(.status-badge,.mode-badge,.side-badge,.status-pill,.warning-chip) {display: inline-flex; align-items: center; justify-content: center; width: fit-content; max-width: 100%; min-height: 23px; padding: 3px 7px; border-radius: 4px; font-size: 10px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; text-transform: none; font-weight: 550;}
+html[data-theme] .futures-shell .recovery-row--ml .status-pill {justify-self: start;}
+html[data-theme] .futures-shell .pnl-badge {background: transparent !important; padding: 0; border: 0; display: grid; gap: 3px; font-size: 12px;}
+html[data-theme] .futures-shell .pnl-badge strong {font-size: 12px; white-space: nowrap;}
+html[data-theme] .futures-shell .pnl-badge small {font-size: 10px; color: var(--text-muted); line-height: 1.4;}
+html[data-theme] .futures-shell .recovery-row .pnl-badge {background: transparent !important; border-radius: 0;}
+html[data-theme] .futures-shell .pagination-row {display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 12px 0; font-size: 11px; color: var(--text-secondary);}
+html[data-theme] .futures-shell .pagination-row button {width: 32px; height: 32px; border: 1px solid var(--border-default);}
+html[data-theme] .futures-shell .pagination-row label {display: flex; align-items: center; gap: 8px; margin-right: auto;}
+html[data-theme] .futures-shell .ml-filter-grid {gap: 12px; padding: 16px 0;}
+html[data-theme] .futures-shell .ml-filter-grid input {min-width: 0; width: 100%;}
+html[data-theme] .futures-shell .research-diagnostics .recovery-table {max-height: 360px;}
+html[data-theme] .futures-shell .details-modal {display: block;}
+html[data-theme] .futures-shell .details-modal .section-title {position: sticky; top: -24px; background: var(--surface-raised); padding: 16px 0; z-index: 5; border-bottom: 1px solid var(--border-default);}
+@media(max-width:1100px) {html[data-theme] .futures-shell .cost-preview-grid {grid-template-columns: repeat(2,minmax(0,1fr));}}
+@media(max-width:720px) {
+  html[data-theme] .futures-shell #main-content {padding: 20px 16px;}
+  html[data-theme] .futures-shell .recovery-page {gap: 16px;}
+  html[data-theme] .futures-shell .summary-card {padding: 14px !important;}
+  html[data-theme] .futures-shell .summary-card strong {font-size: 19px;}
+  html[data-theme] .futures-shell .system-details > summary > span {display: block; margin: 5px 0 0 14px;}
+  html[data-theme] .futures-shell .recovery-row--trades {min-width: 0; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; padding: 16px;}
+  html[data-theme] .futures-shell .recovery-row--trades.recovery-row--head {display: none;}
+  html[data-theme] .futures-shell .recovery-row--trades > span {display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;}
+  html[data-theme] .futures-shell .recovery-row--trades .pnl-badge {display: grid;}
+  html[data-theme] .futures-shell .recovery-row--trades .trade-actions {grid-column: 1 / -1;}
+  html[data-theme] .futures-shell .recovery-row--trades > span:last-child {position: static; box-shadow: none; padding-left: 0;}
+  html[data-theme] .futures-shell .settings-save-bar {bottom: 8px; padding: 10px 12px;}
+  html[data-theme] .futures-shell .settings-save-bar > div {flex: 1; min-width: 100px;}
+  html[data-theme] .futures-shell .recovery-table {max-height: 460px;}
+  html[data-theme] .futures-shell .metric-grid {grid-template-columns: repeat(2,minmax(0,1fr));}
+  html[data-theme] .futures-shell .details-modal .section-title {top: -16px;}
+}
+@media(max-width:350px) {html[data-theme] .futures-shell .metric-grid {grid-template-columns: 1fr;}}
