@@ -7,6 +7,18 @@ import {emptyRuntimeStateStatus, inspectRuntimeStateResponse} from "@/utils/runt
 const safeRequest = promise => promise.catch(error => ({status: error?.response?.status || 0, data: error?.response?.data || {success: false, obj: null}}));
 const pollRuntime = createPollingRuntime();
 let configGeneration = 0;
+const refreshPositionLifecycle = async ({commit, state}, generation) => {
+    const settled = await Promise.allSettled([
+        safeRequest(orderBookRecoveryApi.getState()),
+        safeRequest(orderBookRecoveryApi.getMetrics()),
+        safeRequest(orderBookRecoveryApi.getTrades(state.SHOW_ARCHIVED)),
+    ]);
+    if (generation !== configGeneration) return;
+    const [runtime, metrics, trades] = settled.map(result => result.status === 'fulfilled' ? result.value : null);
+    if (runtime) commit('SET_STATE_RESPONSE', runtime);
+    if (metrics?.data?.success) commit('SET_METRICS', metrics.data.obj);
+    if (trades?.data?.success) commit('SET_TRADES', trades.data.obj);
+};
 const runStorePollingGroup = (context, name, requests) => runPollingGroup({
     runtime: pollRuntime,
     name,
@@ -154,12 +166,10 @@ export default {
             ]);
             return res;
         },
-        async STOP({ dispatch }) {
+        async STOP(context) {
+            const generation = ++configGeneration;
             const res = await orderBookRecoveryApi.stop();
-            await Promise.allSettled([
-                dispatch("LOAD_STATUS"),
-                dispatch("LOAD_DIAGNOSTICS"),
-            ]);
+            await refreshPositionLifecycle(context, generation);
             return res;
         },
         async NEW_PAPER_SESSION({dispatch, commit}) {
@@ -186,22 +196,16 @@ export default {
             await dispatch("LOAD_STATUS");
             return res;
         },
-        async CLOSE_MANUAL({ dispatch }, positionId) {
+        async CLOSE_MANUAL(context, positionId) {
+            const generation = ++configGeneration;
             const res = await orderBookRecoveryApi.closeManual(positionId);
-            await Promise.allSettled([
-                dispatch("LOAD_STATUS"),
-                dispatch("LOAD_TRADES"),
-            ]);
+            await refreshPositionLifecycle(context, generation);
             return res;
         },
-        async ABANDON_LEGACY_PAPER({dispatch, commit}, {positionId, body}) {
+        async ABANDON_LEGACY_PAPER(context, {positionId, body}) {
             const generation = ++configGeneration;
             const res = await orderBookRecoveryApi.abandonLegacyPaper(positionId, body);
-            if (res.data?.success) {
-                const response = await safeRequest(orderBookRecoveryApi.getState());
-                if (generation === configGeneration) commit('SET_STATE_RESPONSE', response);
-                await Promise.allSettled([dispatch('LOAD_TRADES')]);
-            }
+            await refreshPositionLifecycle(context, generation);
             return res;
         },
         async SET_SHOW_ARCHIVED({ commit, dispatch }, value) {

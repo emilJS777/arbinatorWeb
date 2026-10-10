@@ -1,6 +1,12 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'legacy_paper_execution_config_review_required': 'Закрытие заблокировано: не сохранены исторические параметры paper-исполнения. Текущие настройки не могут заменить их.',
+  'Refresh current position state before closing': 'Обновите текущее состояние позиции перед закрытием',
+  'Abandon action unavailable; update backend and database, then refresh': 'Снятие с учёта недоступно в этой версии backend. Обновите backend и миграции, затем обновите данные.',
+  'abandon_confirmation_position_id_required': 'Подтвердите снятие с учёта указанного ID позиции',
+  'abandon_requires_missing_execution_evidence': 'Исполнение подтверждено: используйте обычное закрытие',
+  'abandon_rejected_live_or_pending_execution_evidence': 'Есть признаки live или неподтверждённого исполнения; снятие с учёта запрещено',
   'Abandon legacy paper position': 'Снять legacy paper-позицию с учёта',
   'Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.': 'История сохранится как неподтверждённая. Цена выхода, fill и PnL не создаются. Действие необратимо.',
   'Pause new entries before abandoning this position': 'Сначала приостановите новые входы',
@@ -131,6 +137,14 @@ const ru = {
 };
 
 const en = {
+  legacy_paper_execution_config_review_required: 'Close blocked: historical paper execution parameters are missing. Current settings cannot replace them.',
+  pause_entries_before_abandon: 'Pause new entries before abandoning this position',
+  abandon_requires_confirmed_paper_mode: 'Confirmed paper-only mode is required',
+  abandon_rejected_live_execution_evidence: 'Live execution evidence found; abandonment is forbidden',
+  abandon_rejected_live_or_pending_execution_evidence: 'Live or uncertain execution evidence found; abandonment is forbidden',
+  abandon_rejected_unknown_execution_slot: 'Execution slot status is uncertain; review is required',
+  abandon_requires_missing_execution_evidence: 'Execution evidence exists; use normal closing',
+  abandon_confirmation_position_id_required: 'Confirm abandonment for the specified position ID',
   pending_fixed_latency: 'Waiting for minimum execution latency',
   unresolved_no_fresh_valid_book: 'Unresolved: no fresh valid book',
   unresolved_no_fresh_book_or_depth: 'Unresolved: no fresh book or sufficient depth',

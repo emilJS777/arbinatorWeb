@@ -20,6 +20,7 @@ const buildErrorResponse = (error) => {
         data: {
             success: false,
             obj: {
+                ...(error?.response?.data?.obj || {}),
                 msg: message,
             },
         },

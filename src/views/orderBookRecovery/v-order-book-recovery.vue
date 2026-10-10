@@ -1,7 +1,7 @@
 <script>
 import {mapState} from "vuex";
 import {executionPreview} from '@/utils/executionPreview.js';
-import {canOfferPaperAbandonment, paperAbandonmentBody} from '@/utils/paperAbandonment.js';
+import {canOfferPaperAbandonment, paperAbandonmentBody, paperCloseBlockReason, paperAbandonmentUnavailableReason} from '@/utils/paperAbandonment.js';
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 import {startBlockReasons, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
@@ -19,6 +19,8 @@ export default {
     startBlockReasons() { return startBlockReasons({config: this.config, runtime: this.statePayload, dirty: this.formDirty, loading: this.actionLoading.start}); },
     canStart() { return this.startBlockReasons.length === 0; },
     canOfferAbandon() { return canOfferPaperAbandonment(this.openPosition, this.statePayload, this.stateRequest); },
+    closeBlockReason() { return paperCloseBlockReason(this.openPosition, this.statePayload, this.stateRequest); },
+    abandonmentUnavailableReason() { return paperAbandonmentUnavailableReason(this.openPosition, this.statePayload, this.stateRequest); },
     formDirty() {return this.form && this.savedForm && JSON.stringify(this.form) !== JSON.stringify(this.savedForm);},
     visibleTrades() {return (this.trades || []).filter(trade => this.historyMode === 'all' || (trade.execution_mode || 'paper') === this.historyMode);},
     reviewedChanges() {return settingsChanges(this.savedForm || {}, this.form || {});},
@@ -327,13 +329,13 @@ export default {
       });
     },
     closePosition() {
-      if (!this.openPosition) return;
+      if (!this.openPosition || this.closeBlockReason) return;
       if (!window.confirm(this.$t(this.openPosition.execution_mode === 'live' ? 'Close live position on the exchange? This sends a real closing order.' : 'Close current paper position manually?'))) return;
       this.runAction("closePosition", async () => {
         const res = await this.$store.dispatch("orderBookRecovery/CLOSE_MANUAL", this.openPosition.id);
         this.emitter.emit("toster", {
           success: isResponseSuccess(res),
-          msg: isResponseSuccess(res) ? this.$t(res.data?.obj?.closed_at ? 'Position closed manually' : 'Close requested; execution unresolved') : getResponseMessage(res),
+          msg: isResponseSuccess(res) ? this.$t(res.data?.obj?.closed_at ? 'Position closed manually' : 'Close requested; execution unresolved') : this.$t(getResponseMessage(res)),
         });
       });
     },
@@ -344,7 +346,7 @@ export default {
       if (!window.confirm(message)) return;
       this.runAction('abandonLegacyPaper', async () => {
         const res = await this.$store.dispatch('orderBookRecovery/ABANDON_LEGACY_PAPER', {positionId, body: paperAbandonmentBody(positionId)});
-        this.emitter.emit('toster', {success: isResponseSuccess(res), msg: isResponseSuccess(res) ? this.$t('Paper position abandoned; history preserved') : getResponseMessage(res)});
+        this.emitter.emit('toster', {success: isResponseSuccess(res), msg: isResponseSuccess(res) ? this.$t('Paper position abandoned; history preserved') : this.$t(getResponseMessage(res))});
       });
     },
     resetRecovery() {
@@ -859,11 +861,6 @@ export default {
       </template>
       <p v-else>{{ $t(stateRequest?.stale ? 'State request failed; retained values are not current runtime evidence' : 'Exit diagnostics absent in last state response; inspect HTTP response and compatibility') }}</p>
       <p>{{ $t('Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.') }}</p>
-      <div v-if="canOfferAbandon">
-        <p>{{ $t('Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.') }}</p>
-        <p v-if="statePayload?.enabled !== false">{{ $t('Pause new entries before abandoning this position') }}</p>
-        <button class="button-danger" :disabled="statePayload?.enabled !== false || actionLoading.abandonLegacyPaper" @click="abandonLegacyPaper">{{ $t('Abandon legacy paper position') }} #{{ openPosition.id }}</button>
-      </div>
     </div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
       {{ $t('Backend unavailable. Retained data may be out of date.') }}
@@ -1406,7 +1403,14 @@ export default {
         <div class="empty-row" v-else>{{ $t("No open position") }}</div>
       </div>
       <div class="action-row" v-if="openPosition">
-        <button class="button-danger" :disabled="actionLoading.closePosition" @click="closePosition"><i class="fa-solid fa-xmark"></i> {{ $t(actionLoading.closePosition ? 'Closing...' : 'Close Position') }}</button>
+        <button class="button-danger" :disabled="Boolean(closeBlockReason) || actionLoading.closePosition || actionLoading.abandonLegacyPaper" @click="closePosition"><i class="fa-solid fa-xmark"></i> {{ $t(actionLoading.closePosition ? 'Closing...' : 'Close Position') }}</button>
+        <button v-if="canOfferAbandon" class="button-danger" :disabled="statePayload?.enabled !== false || actionLoading.abandonLegacyPaper || actionLoading.closePosition" @click="abandonLegacyPaper">{{ $t('Abandon legacy paper position') }} #{{ openPosition.id }}</button>
+        <button v-if="canOfferAbandon && statePayload?.enabled !== false" :disabled="actionLoading.stop || actionLoading.abandonLegacyPaper" @click="stop"><i class="fa-solid fa-pause" aria-hidden="true"></i> {{ $t('Pause new entries') }}</button>
+      </div>
+      <div v-if="openPosition && closeBlockReason" class="workspace-notice" role="status">
+        <p>{{ $t(closeBlockReason) }}</p>
+        <p v-if="abandonmentUnavailableReason">{{ $t(abandonmentUnavailableReason) }}</p>
+        <p v-if="canOfferAbandon">{{ $t('Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.') }}</p>
       </div>
     </section>
 
