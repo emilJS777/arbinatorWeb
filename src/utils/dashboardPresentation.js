@@ -38,6 +38,13 @@ export const datasetLabels = {
 };
 
 export const settingLabels = {
+  strategy_version: 'Strategy version', experiment_settings: 'Paper experiment',
+  'experiment_settings.persistence_seconds': 'Persistent entry signal (seconds)',
+  'experiment_settings.cost_hurdle': 'Gross TP / estimated cost hurdle',
+  'experiment_settings.funding_reserve_bps': 'Funding reserve (bps per holding period)',
+  'experiment_settings.exit_persistence_seconds': 'Exit deterioration persistence (seconds)',
+  'experiment_settings.max_hold_seconds': 'Maximum holding time (seconds)',
+  'experiment_settings.trailing_margin_percent': 'Trailing distance (% of margin; 0 disables)',
   exchange: 'Exchange', symbol: 'Symbol', exchange_id: 'Exchange', trading_pair_id: 'Symbol', execution_mode: 'Execution mode',
   base_margin_usdt: 'Base margin · USDT', leverage: 'Leverage', max_leverage: 'Max leverage', risk_per_trade_percent: 'Risk per trade %',
   max_position_margin_usdt: 'Max position margin USDT', max_consecutive_losses: 'Max consecutive losses', emergency_entry_block: 'Block new entries',

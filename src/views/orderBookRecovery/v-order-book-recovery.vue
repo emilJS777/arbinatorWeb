@@ -958,6 +958,20 @@ export default {
           </details>
           <p v-if="form.execution_mode === 'paper' && executionPreview.lossLimitsExceedEquity" class="workspace-notice compact-alert">{{ $t('A loss limit exceeds configured paper equity; it may not protect the account before capital is exhausted. Existing sessions use their frozen initial equity.') }}</p>
         </div>
+        <div class="workspace-notice neutral config-group-title">{{ $t('Paper experiment') }}</div>
+        <label>{{ $t('Strategy version') }}<select v-model="form.strategy_version" :disabled="Boolean(openPosition) || form.execution_mode !== 'paper'">
+          <option value="baseline">{{ $t('Baseline unchanged') }}</option>
+          <option value="adaptive_book_v1">Adaptive Book v1 · {{ $t('Paper only') }}</option>
+        </select></label>
+        <template v-if="form.strategy_version === 'adaptive_book_v1'">
+          <p class="workspace-notice neutral">{{ $t('Experimental heuristic, not a return forecast. Trade flow unavailable. Funding reserve is an assumption, not a settlement. TP/SL and risk limits remain authoritative.') }}</p>
+          <label>{{ $t('Persistent entry signal (seconds)') }}<input v-model.number="form.experiment_settings.persistence_seconds" type="number" min="1" max="60"/></label>
+          <label>{{ $t('Gross TP / estimated cost hurdle') }}<input v-model.number="form.experiment_settings.cost_hurdle" type="number" min="1" max="20" step="0.1"/></label>
+          <label>{{ $t('Funding reserve (bps per holding period)') }}<input v-model.number="form.experiment_settings.funding_reserve_bps" type="number" min="0" max="100" step="0.1"/></label>
+          <label>{{ $t('Exit deterioration persistence (seconds)') }}<input v-model.number="form.experiment_settings.exit_persistence_seconds" type="number" min="1" max="60"/></label>
+          <label>{{ $t('Maximum holding time (seconds)') }}<input v-model.number="form.experiment_settings.max_hold_seconds" type="number" min="5" max="3600"/></label>
+          <label>{{ $t('Trailing distance (% of margin; 0 disables)') }}<input v-model.number="form.experiment_settings.trailing_margin_percent" type="number" min="0" max="100" step="0.1"/></label>
+        </template>
         <div class="workspace-notice neutral config-group-title">{{ $t('Live activation unavailable in this workspace') }}</div>
         <label>{{ $t("Execution mode") }}<select v-model="form.execution_mode" :disabled="Boolean(openPosition)">
             <option value="paper">{{ $t("Paper") }}</option>
@@ -1148,6 +1162,12 @@ export default {
         <div><span>{{ $t("Live market type") }}</span><strong>{{ debug?.live_market_type || statePayload?.live_market?.live_market_type || '-' }}</strong></div>
         <div><span>{{ $t("Live market valid") }}</span><strong>{{ debug?.live_market_valid ? 'true' : 'false' }}</strong></div>
         <div><span>{{ $t("Live market error") }}</span><strong>{{ debug?.live_market_error || statePayload?.live_market?.live_market_error || '-' }}</strong></div>
+        <template v-if="debug?.last_evaluation?.consensus?.experiment">
+          <div><span>{{ $t('Paper experiment') }}</span><strong>{{ $t(debug.last_evaluation.consensus.experiment.reject_reason || 'Accepted') }}</strong></div>
+          <div><span>{{ $t('Round-trip fees estimate (USDT)') }}</span><strong>{{ debug.last_evaluation.consensus.experiment.roundtrip_fees_usdt == null ? '—' : fmt(debug.last_evaluation.consensus.experiment.roundtrip_fees_usdt, 6) }}</strong></div>
+          <div><span>{{ $t('Spread + depth estimate (USDT)') }}</span><strong>{{ debug.last_evaluation.consensus.experiment.spread_depth_usdt == null ? '—' : fmt(debug.last_evaluation.consensus.experiment.spread_depth_usdt, 6) }}</strong></div>
+          <div><span>{{ $t('Gross target / net cost budget (USDT)') }}</span><strong>{{ debug.last_evaluation.consensus.experiment.gross_tp_usdt == null ? '—' : fmt(debug.last_evaluation.consensus.experiment.gross_tp_usdt, 6) }} / {{ debug.last_evaluation.consensus.experiment.net_target_after_cost_budget_usdt == null ? '—' : fmt(debug.last_evaluation.consensus.experiment.net_target_after_cost_budget_usdt, 6) }}</strong></div>
+        </template>
         <div><span>{{ $t("Bid top 5") }}</span><strong>{{ fmt(debug?.last_evaluation?.bid_volume_top_5, 2) }}</strong></div>
         <div><span>{{ $t("Ask top 5") }}</span><strong>{{ fmt(debug?.last_evaluation?.ask_volume_top_5, 2) }}</strong></div>
         <div><span>{{ $t("Imbalance") }}</span><strong>{{ fmt(debug?.last_evaluation?.imbalance, 4) }}</strong></div>

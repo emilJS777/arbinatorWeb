@@ -1,6 +1,19 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Paper experiment': 'Paper-эксперимент', 'Strategy version': 'Версия стратегии', 'Baseline unchanged': 'Baseline без изменений', 'Paper only': 'Только paper',
+  'Experimental heuristic, not a return forecast. Trade flow unavailable. Funding reserve is an assumption, not a settlement. TP/SL and risk limits remain authoritative.': 'Экспериментальная эвристика, не прогноз доходности. Trade flow недоступен. Резерв funding — допущение, не начисление. TP/SL и лимиты риска сохраняют приоритет.',
+  'Persistent entry signal (seconds)': 'Устойчивость сигнала входа (с)', 'Gross TP / estimated cost hurdle': 'Минимальное отношение gross TP к оценке затрат',
+  'Funding reserve (bps per holding period)': 'Резерв funding (б.п. за период удержания)', 'Exit deterioration persistence (seconds)': 'Устойчивость ухудшения сигнала для выхода (с)',
+  'Maximum holding time (seconds)': 'Максимальное удержание (с)', 'Trailing distance (% of margin; 0 disables)': 'Trailing: отступ (% маржи; 0 — выключен)',
+  'Round-trip fees estimate (USDT)': 'Оценка двух комиссий (USDT)', 'Spread + depth estimate (USDT)': 'Оценка спреда и глубины (USDT)',
+  'Gross target / net cost budget (USDT)': 'Gross цель / остаток после бюджета затрат (USDT)', 'Accepted': 'Принято',
+  'experimental_paper_only': 'Эксперимент разрешён только в paper', 'experimental_stale_book': 'Устаревший стакан',
+  'experimental_cross_exchange_required': 'Требуется подтверждение других бирж', 'experimental_contradictory_signal': 'Противоречивый сигнал',
+  'experimental_configured_contradiction': 'Биржа исполнения противоречит сигналу', 'experimental_weak_momentum': 'Momentum не подтверждает направление',
+  'experimental_insufficient_depth': 'Недостаточная глубина', 'experimental_signal_not_persistent': 'Недостаточная устойчивость сигнала',
+  'experimental_cost_hurdle': 'Цель TP ниже порога затрат', 'experimental_max_hold': 'Истекло время удержания',
+  'experimental_trailing': 'Устойчивое снижение от максимума PnL', 'experimental_signal_deterioration': 'Устойчивое ухудшение сигнала',
   'More session metrics': 'Дополнительные метрики сессии', 'Runtime state & manual recovery controls': 'Состояние и ручное управление размером позиции',
   'Protocol & historical research': 'Протокол и исторические исследования', 'Filters & sort': 'Фильтры и сортировка',
   'running': 'Работает', 'stopped': 'Приостановлен', 'waiting': 'Ожидание', 'active': 'Активно', 'disabled': 'Отключено',
@@ -171,6 +184,12 @@ const ru = {
 };
 
 const en = {
+  'experimental_paper_only': 'Paper experiment only', 'experimental_stale_book': 'Stale order book',
+  'experimental_cross_exchange_required': 'Cross-exchange confirmation required', 'experimental_contradictory_signal': 'Contradictory signal',
+  'experimental_configured_contradiction': 'Execution venue contradicts signal', 'experimental_weak_momentum': 'Momentum does not confirm direction',
+  'experimental_insufficient_depth': 'Insufficient depth', 'experimental_signal_not_persistent': 'Waiting for persistent signal',
+  'experimental_cost_hurdle': 'TP target below cost hurdle', 'experimental_max_hold': 'Maximum holding time reached',
+  'experimental_trailing': 'Sustained pullback from peak PnL', 'experimental_signal_deterioration': 'Sustained signal deterioration',
   'Market feed connected': 'WebSocket connected', 'Market feed disconnected': 'WebSocket disconnected',
   running: 'Running', stopped: 'Paused', waiting: 'Waiting', active: 'Active',
   'Max daily loss': 'Daily loss limit · USDT', 'Max total loss': 'Total loss limit · USDT', 'Leverage': 'Leverage · ×',

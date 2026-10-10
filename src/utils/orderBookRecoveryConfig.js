@@ -76,9 +76,14 @@ const normalizeMlLabelHorizons = value => {
     return normalized.length ? Array.from(new Set(normalized)) : configDefaults.ml_label_horizons_seconds;
 };
 
+export const experimentDefaults = Object.freeze({persistence_seconds: 3, cost_hurdle: 2, funding_reserve_bps: 5,
+    exit_persistence_seconds: 3, max_hold_seconds: 120, trailing_margin_percent: 0});
+
 export const normalizeConfigForm = (form = {}) => ({
     ...configDefaults,
     ...form,
+    strategy_version: form.strategy_version ?? 'baseline',
+    experiment_settings: {...experimentDefaults, ...(form.experiment_settings || {})},
     emergency_entry_block: form.emergency_entry_block == null ? true : Boolean(form.emergency_entry_block),
     risk_per_trade_percent: Number(form.risk_per_trade_percent ?? 0.25),
     max_position_margin_usdt: Number(form.max_position_margin_usdt ?? 10),
