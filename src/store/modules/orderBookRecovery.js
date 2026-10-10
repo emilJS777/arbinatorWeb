@@ -5,6 +5,7 @@ import {isValidMlStats, normalizeArray} from "@/utils/safePayload.js";
 
 const safeRequest = promise => promise.catch(() => ({data: {success: false, obj: null}}));
 const pollRuntime = createPollingRuntime();
+let configGeneration = 0;
 const runStorePollingGroup = (context, name, requests) => runPollingGroup({
     runtime: pollRuntime,
     name,
@@ -67,11 +68,13 @@ export default {
         },
         async LOAD_STATUS(context) {
             const {commit} = context;
+            const generation = configGeneration;
             const {responses, skipped} = await runStorePollingGroup(context, "status", [
                 () => orderBookRecoveryApi.getState(),
                 () => orderBookRecoveryApi.getMetrics(),
             ]);
             if (skipped) return {skipped: true};
+            if (generation !== configGeneration) return {skipped: true};
             const [stateResponse, metrics] = responses;
             if (stateResponse?.data?.success) commit("SET_STATE", stateResponse.data.obj);
             if (metrics?.data?.success) commit("SET_METRICS", metrics.data.obj);
@@ -131,8 +134,14 @@ export default {
             }
         },
         async SAVE_CONFIG({ commit }, body) {
+            const generation = ++configGeneration;
             const res = await orderBookRecoveryApi.updateConfig(body);
-            if (res.data.success) commit("SET_CONFIG", res.data.obj);
+            if (res.data.success && generation === configGeneration) {
+                commit("SET_CONFIG", res.data.obj);
+                // A user Save needs a post-write state read, even during polling backoff.
+                const refreshed = await safeRequest(orderBookRecoveryApi.getState());
+                if (generation === configGeneration && refreshed.data?.success) commit("SET_STATE", refreshed.data.obj);
+            }
             return res;
         },
         async START({ dispatch }) {
