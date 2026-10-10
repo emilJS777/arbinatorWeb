@@ -1,6 +1,7 @@
 <script>
 import {mapState} from "vuex";
 import {executionPreview} from '@/utils/executionPreview.js';
+import {canOfferPaperAbandonment, paperAbandonmentBody} from '@/utils/paperAbandonment.js';
 import {getResponseMessage, isResponseSuccess} from "@/store/request.js";
 import {buildConfigPayload, normalizeConfigForm, pairOptionsForExchange, resolveExchange, resolvePair} from "@/utils/orderBookRecoveryConfig.js";
 import {startBlockReasons, pnlEvidence, protectionLabel, sectionTitle, settingsChanges, snapshotAge, utcTime, validateSettings} from '@/utils/workspacePresentation.js';
@@ -17,6 +18,7 @@ export default {
     pageTitle() { return sectionTitle(this.section); },
     startBlockReasons() { return startBlockReasons({config: this.config, runtime: this.statePayload, dirty: this.formDirty, loading: this.actionLoading.start}); },
     canStart() { return this.startBlockReasons.length === 0; },
+    canOfferAbandon() { return canOfferPaperAbandonment(this.openPosition, this.statePayload, this.stateRequest); },
     formDirty() {return this.form && this.savedForm && JSON.stringify(this.form) !== JSON.stringify(this.savedForm);},
     visibleTrades() {return (this.trades || []).filter(trade => this.historyMode === 'all' || (trade.execution_mode || 'paper') === this.historyMode);},
     reviewedChanges() {return settingsChanges(this.savedForm || {}, this.form || {});},
@@ -335,6 +337,16 @@ export default {
         });
       });
     },
+    abandonLegacyPaper() {
+      if (!this.canOfferAbandon || this.statePayload?.enabled !== false) return;
+      const positionId = this.openPosition.id;
+      const message = `${this.$t('Abandon legacy paper position')} #${positionId}?\n${this.$t('Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.')}`;
+      if (!window.confirm(message)) return;
+      this.runAction('abandonLegacyPaper', async () => {
+        const res = await this.$store.dispatch('orderBookRecovery/ABANDON_LEGACY_PAPER', {positionId, body: paperAbandonmentBody(positionId)});
+        this.emitter.emit('toster', {success: isResponseSuccess(res), msg: isResponseSuccess(res) ? this.$t('Paper position abandoned; history preserved') : getResponseMessage(res)});
+      });
+    },
     resetRecovery() {
       if (this.openPosition) {
         this.emitter.emit("toster", {success: false, msg: "cannot_change_margin_with_open_position"});
@@ -428,6 +440,7 @@ export default {
     },
     formatLiveStatus(status) {
       const labels = {
+        paper_abandoned: 'Abandoned / unverified',
         open: "Open",
         closed: "Closed",
         open_failed: "Open failed",
@@ -453,6 +466,7 @@ export default {
       return "neutral";
     },
     resultLabel(trade) {
+      if (trade?.abandoned_at) return 'Abandoned / unverified';
       if (trade?.live_status === 'paper_pending') return 'Pending';
       if (trade?.live_status === 'paper_cancelled') return 'Cancelled';
       if (["open_failed", "close_failed"].includes(trade?.live_status)) return "Failed";
@@ -845,6 +859,11 @@ export default {
       </template>
       <p v-else>{{ $t(stateRequest?.stale ? 'State request failed; retained values are not current runtime evidence' : 'Exit diagnostics absent in last state response; inspect HTTP response and compatibility') }}</p>
       <p>{{ $t('Heartbeat is process-local. WebSocket connectivity does not prove fresh futures data. Latency is a minimum, not a fill deadline.') }}</p>
+      <div v-if="canOfferAbandon">
+        <p>{{ $t('Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.') }}</p>
+        <p v-if="statePayload?.enabled !== false">{{ $t('Pause new entries before abandoning this position') }}</p>
+        <button class="button-danger" :disabled="statePayload?.enabled !== false || actionLoading.abandonLegacyPaper" @click="abandonLegacyPaper">{{ $t('Abandon legacy paper position') }} #{{ openPosition.id }}</button>
+      </div>
     </div>
     <div class="debug-warning" v-if="backendStatus?.temporarilyUnavailable">
       {{ $t('Backend unavailable. Retained data may be out of date.') }}
@@ -1435,7 +1454,7 @@ export default {
             <span v-if="formatWarningSummary(trade)" class="warning-chip"><i class="fa-solid fa-triangle-exclamation"></i> {{ $t(formatWarningSummary(trade)) }}</span>
             <button @click="viewDetails(trade)">{{ $t("View Details") }}</button>
             <button v-if="trade.closed_at && !trade.is_archived" :disabled="actionLoading[`archiveTrade:${trade.id}`]" @click="archiveTrade(trade)">{{ $t("Archive") }}</button>
-            <button v-if="trade.is_archived" class="button-danger" :disabled="actionLoading[`deleteArchivedTrade:${trade.id}`]" @click="deleteArchivedTrade(trade)">{{ $t("Delete") }}</button>
+            <button v-if="trade.is_archived && !trade.abandoned_at" class="button-danger" :disabled="actionLoading[`deleteArchivedTrade:${trade.id}`]" @click="deleteArchivedTrade(trade)">{{ $t("Delete") }}</button>
           </span>
         </div>
       </div>
@@ -1540,6 +1559,7 @@ export default {
             <div><span>{{ $t("Notional") }}</span><strong>{{ fmt(detail('trade.notional', 0), 2) }}{{ $t("USDT") }}</strong></div>
             <div><span>{{ $t("Opened at") }}</span><strong>{{ dt(detail('trade.opened_at')) }}</strong></div>
             <div><span>{{ $t("Closed at") }}</span><strong>{{ dt(detail('trade.closed_at')) }}</strong></div>
+            <div v-if="detail('trade.abandoned_at')"><span>{{ $t('Abandoned at') }}</span><strong>{{ dt(detail('trade.abandoned_at')) }}</strong><small>{{ $t('Abandoned / unverified; excluded from accounting') }}</small></div>
             <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
           </div>
         </div>

@@ -2,6 +2,7 @@ export const sectionTitle = section => ({overview: 'Overview', positions: 'Posit
 
 // Presentation only. Missing fees/funding or fallback fills are never confirmed profit.
 export function pnlEvidence(trade = {}) {
+  if (trade.abandoned_at || trade.accounting_status === 'abandoned_unverified') return 'Abandoned / unverified; excluded from accounting';
   if ((trade.execution_mode || 'paper') !== 'live') return 'Simulated PnL';
   if (!trade.closed_at) return 'Unrealized estimate';
   if (trade.exit_price_fallback_used || trade.entry_price_fallback_used || trade.pnl_source === 'fallback_market_price') return 'Estimated PnL';

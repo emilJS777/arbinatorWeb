@@ -194,6 +194,16 @@ export default {
             ]);
             return res;
         },
+        async ABANDON_LEGACY_PAPER({dispatch, commit}, {positionId, body}) {
+            const generation = ++configGeneration;
+            const res = await orderBookRecoveryApi.abandonLegacyPaper(positionId, body);
+            if (res.data?.success) {
+                const response = await safeRequest(orderBookRecoveryApi.getState());
+                if (generation === configGeneration) commit('SET_STATE_RESPONSE', response);
+                await Promise.allSettled([dispatch('LOAD_TRADES')]);
+            }
+            return res;
+        },
         async SET_SHOW_ARCHIVED({ commit, dispatch }, value) {
             commit("SET_SHOW_ARCHIVED", value);
             await dispatch("LOAD_TRADES");

@@ -1,6 +1,18 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Abandon legacy paper position': 'Снять legacy paper-позицию с учёта',
+  'Preserve history as unverified. No exit, fill or PnL will be created. This cannot be undone.': 'История сохранится как неподтверждённая. Цена выхода, fill и PnL не создаются. Действие необратимо.',
+  'Pause new entries before abandoning this position': 'Сначала приостановите новые входы',
+  'Paper position abandoned; history preserved': 'Paper-позиция снята с учёта; история сохранена',
+  'Abandoned / unverified': 'Снята с учёта / не подтверждена',
+  'Abandoned at': 'Снята с учёта',
+  'abandon_rejected_unknown_execution_slot': 'Execution slot имеет неопределённый статус; нужна проверка',
+  'Abandoned / unverified; excluded from accounting': 'Снята с учёта / не подтверждена; исключена из статистики',
+  'abandoned_unverified': 'Снята с учёта, исполнение не подтверждено',
+  'pause_entries_before_abandon': 'Сначала приостановите новые входы',
+  'abandon_requires_confirmed_paper_mode': 'Нужен однозначно подтверждённый режим paper',
+  'abandon_rejected_live_execution_evidence': 'Обнаружены признаки live-исполнения; действие запрещено',
   'Last state request': 'Последний запрос state',
   'Last successful state': 'Последний успешный state',
   'Network error': 'Ошибка сети',

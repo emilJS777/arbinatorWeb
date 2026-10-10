@@ -72,6 +72,9 @@ export default {
             reason: "manual_close",
         });
     },
+    abandonLegacyPaper(positionId, body) {
+        return apiClient.post(`/orderbook-recovery/positions/${positionId}/abandon-legacy-paper`, body);
+    },
     archiveTrade(tradeId) {
         return apiClient.post(`/orderbook-recovery/trades/${tradeId}/archive`, {
             reason: "manual_archive",
