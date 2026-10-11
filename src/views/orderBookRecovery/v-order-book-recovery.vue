@@ -1668,6 +1668,22 @@ export default {
           </div>
         </div>
 
+        <div class="detail-block" v-if="detail('trade.execution_mode', null) === 'paper'">
+          <h4>{{ $t('Entry quality measurements') }}</h4>
+          <p class="config-hint">{{ $t('Executable quote estimates after both fees; funding excluded. Not fills or expected profit. Only while the selected trade is open; no post-exit data.') }}</p>
+          <div v-if="detail('decision_snapshot.entry_quality_measurement.samples', 0)" class="metric-grid">
+            <div><span>{{ $t('Observed net MFE') }}</span><strong>{{ moneyResult(detail('decision_snapshot.entry_quality_measurement.mfe_net_usdt', null)) }}</strong></div>
+            <div><span>{{ $t('Observed net MAE') }}</span><strong>{{ moneyResult(detail('decision_snapshot.entry_quality_measurement.mae_net_usdt', null)) }}</strong></div>
+            <div v-for="horizon in [15, 30, 60, 120]" :key="horizon">
+              <span>{{ horizon }} {{ $t('seconds') }} · {{ $t('Net quote excluding funding') }}</span>
+              <strong v-if="detail(`decision_snapshot.entry_quality_measurement.horizons.${horizon}.status`, null) === 'observed'">{{ moneyResult(detail(`decision_snapshot.entry_quality_measurement.horizons.${horizon}.net_excluding_funding_usdt`, null)) }}</strong>
+              <strong v-else>{{ $t('No observation, not a loss') }}</strong>
+            </div>
+          </div>
+          <p v-else class="config-hint">{{ $t('No measurements for this trade. Historical quotes are not reconstructed.') }}</p>
+          <p class="config-hint">{{ $t('First fresh depth quote within 5 seconds after each horizon. Gaps remain missing; actual delayed exits may differ.') }}</p>
+        </div>
+
         <div class="detail-block">
           <h4>{{ $t("Reconciliation") }}</h4>
           <div class="metric-grid">

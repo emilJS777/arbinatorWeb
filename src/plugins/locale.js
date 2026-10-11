@@ -1,6 +1,14 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Entry quality measurements': 'Измерения качества входа',
+  'Observed net MFE': 'Наблюдавшийся лучший net',
+  'Observed net MAE': 'Наблюдавшийся худший net',
+  'Net quote excluding funding': 'Оценка net без funding',
+  'No observation, not a loss': 'Нет наблюдения, не означает убыток',
+  'No measurements for this trade. Historical quotes are not reconstructed.': 'Для сделки нет измерений. Исторические котировки не восстанавливаются.',
+  'Executable quote estimates after both fees; funding excluded. Not fills or expected profit. Only while the selected trade is open; no post-exit data.': 'Оценки по доступной глубине после обеих комиссий, без funding. Не исполнения и не прогноз прибыли. Только пока выбранная сделка открыта, без данных после выхода.',
+  'First fresh depth quote within 5 seconds after each horizon. Gaps remain missing; actual delayed exits may differ.': 'Первая свежая котировка с глубиной в течение 5 секунд после горизонта. Пропуски не заполняются; фактический выход с задержкой может отличаться.',
   'V2 candidate: entry and reversal require at least 6 seconds / 4 fresh books. Neutral is not reversal. Re-entry requires a sustained signal reset first. Unproven; paper only.': 'Кандидат v2: вход и разворот требуют минимум 6 секунд / 4 свежих стакана. Нейтральность не равна развороту. Повторный вход требует предварительного устойчивого сброса сигнала. Не проверен; только paper.',
   'candidate_waiting_signal_renewal': 'Ожидание нового цикла сигнала',
   'candidate_confirmed_reversal': 'Устойчивый подтверждённый разворот', 'candidate_trailing': 'Устойчивое срабатывание trailing',
@@ -187,6 +195,14 @@ const ru = {
 };
 
 const en = {
+  'Entry quality measurements': 'Entry quality measurements',
+  'Observed net MFE': 'Observed net MFE',
+  'Observed net MAE': 'Observed net MAE',
+  'Net quote excluding funding': 'Net quote excluding funding',
+  'No observation, not a loss': 'No observation, not a loss',
+  'No measurements for this trade. Historical quotes are not reconstructed.': 'No measurements for this trade. Historical quotes are not reconstructed.',
+  'Executable quote estimates after both fees; funding excluded. Not fills or expected profit. Only while the selected trade is open; no post-exit data.': 'Executable quote estimates after both fees; funding excluded. Not fills or expected profit. Only while the selected trade is open; no post-exit data.',
+  'First fresh depth quote within 5 seconds after each horizon. Gaps remain missing; actual delayed exits may differ.': 'First fresh depth quote within 5 seconds after each horizon. Gaps remain missing; actual delayed exits may differ.',
   'candidate_waiting_signal_renewal': 'Waiting for a renewed signal',
   'candidate_confirmed_reversal': 'Sustained confirmed reversal', 'candidate_trailing': 'Sustained trailing trigger',
   'experimental_paper_only': 'Paper experiment only', 'experimental_stale_book': 'Stale order book',
