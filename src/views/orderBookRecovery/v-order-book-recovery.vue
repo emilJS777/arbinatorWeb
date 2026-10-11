@@ -962,8 +962,10 @@ export default {
         <label>{{ $t('Strategy version') }}<select v-model="form.strategy_version" :disabled="Boolean(openPosition) || form.execution_mode !== 'paper'">
           <option value="baseline">{{ $t('Baseline unchanged') }}</option>
           <option value="adaptive_book_v1">Adaptive Book v1 · {{ $t('Paper only') }}</option>
+          <option value="adaptive_book_v2">Adaptive Book v2 · {{ $t('Paper only') }}</option>
         </select></label>
-        <template v-if="form.strategy_version === 'adaptive_book_v1'">
+        <template v-if="['adaptive_book_v1', 'adaptive_book_v2'].includes(form.strategy_version)">
+          <p v-if="form.strategy_version === 'adaptive_book_v2'" class="workspace-notice neutral">{{ $t('V2 candidate: entry and reversal require at least 6 seconds / 4 fresh books. Neutral is not reversal. Re-entry requires a sustained signal reset first. Unproven; paper only.') }}</p>
           <p class="workspace-notice neutral">{{ $t('Experimental heuristic, not a return forecast. Trade flow unavailable. Funding reserve is an assumption, not a settlement. TP/SL and risk limits remain authoritative.') }}</p>
           <label>{{ $t('Persistent entry signal (seconds)') }}<input v-model.number="form.experiment_settings.persistence_seconds" type="number" min="1" max="60"/></label>
           <label>{{ $t('Gross TP / estimated cost hurdle') }}<input v-model.number="form.experiment_settings.cost_hurdle" type="number" min="1" max="20" step="0.1"/></label>

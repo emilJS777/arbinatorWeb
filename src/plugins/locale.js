@@ -1,6 +1,9 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'V2 candidate: entry and reversal require at least 6 seconds / 4 fresh books. Neutral is not reversal. Re-entry requires a sustained signal reset first. Unproven; paper only.': 'Кандидат v2: вход и разворот требуют минимум 6 секунд / 4 свежих стакана. Нейтральность не равна развороту. Повторный вход требует предварительного устойчивого сброса сигнала. Не проверен; только paper.',
+  'candidate_waiting_signal_renewal': 'Ожидание нового цикла сигнала',
+  'candidate_confirmed_reversal': 'Устойчивый подтверждённый разворот', 'candidate_trailing': 'Устойчивое срабатывание trailing',
   'Paper experiment': 'Paper-эксперимент', 'Strategy version': 'Версия стратегии', 'Baseline unchanged': 'Baseline без изменений', 'Paper only': 'Только paper',
   'Experimental heuristic, not a return forecast. Trade flow unavailable. Funding reserve is an assumption, not a settlement. TP/SL and risk limits remain authoritative.': 'Экспериментальная эвристика, не прогноз доходности. Trade flow недоступен. Резерв funding — допущение, не начисление. TP/SL и лимиты риска сохраняют приоритет.',
   'Persistent entry signal (seconds)': 'Устойчивость сигнала входа (с)', 'Gross TP / estimated cost hurdle': 'Минимальное отношение gross TP к оценке затрат',
@@ -184,6 +187,8 @@ const ru = {
 };
 
 const en = {
+  'candidate_waiting_signal_renewal': 'Waiting for a renewed signal',
+  'candidate_confirmed_reversal': 'Sustained confirmed reversal', 'candidate_trailing': 'Sustained trailing trigger',
   'experimental_paper_only': 'Paper experiment only', 'experimental_stale_book': 'Stale order book',
   'experimental_cross_exchange_required': 'Cross-exchange confirmation required', 'experimental_contradictory_signal': 'Contradictory signal',
   'experimental_configured_contradiction': 'Execution venue contradicts signal', 'experimental_weak_momentum': 'Momentum does not confirm direction',
