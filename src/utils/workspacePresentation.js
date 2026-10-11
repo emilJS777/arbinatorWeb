@@ -13,7 +13,9 @@ export function pnlEvidence(trade = {}) {
 export function utcTime(value) {
   if (!value) return NaN;
   if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
-  return Date.parse(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
+  // Flask emits RFC 1123/GMT; only naive ISO timestamps need a UTC suffix.
+  const naiveISO = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+  return Date.parse(naiveISO.test(value) ? `${value.replace(' ', 'T')}Z` : value);
 }
 export function snapshotAge(value, now = Date.now()) {
   const time = utcTime(value);

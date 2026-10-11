@@ -1617,7 +1617,7 @@ export default {
             <div><span>{{ $t("Notional") }}</span><strong>{{ fmt(detail('trade.notional', 0), 2) }}{{ $t("USDT") }}</strong></div>
             <div><span>{{ $t("Opened at") }}</span><strong>{{ dt(detail('trade.opened_at')) }}</strong></div>
             <div><span>{{ $t("Closed at") }}</span><strong>{{ dt(detail('trade.closed_at')) }}</strong></div>
-            <div v-if="detail('trade.abandoned_at')"><span>{{ $t('Abandoned at') }}</span><strong>{{ dt(detail('trade.abandoned_at')) }}</strong><small>{{ $t('Abandoned / unverified; excluded from accounting') }}</small></div>
+            <div v-if="detail('trade.abandoned_at', null)"><span>{{ $t('Abandoned at') }}</span><strong>{{ dt(detail('trade.abandoned_at', null)) }}</strong><small>{{ $t('Abandoned / unverified; excluded from accounting') }}</small></div>
             <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
           </div>
         </div>
@@ -1670,7 +1670,7 @@ export default {
           <h4>{{ $t("Reconciliation") }}</h4>
           <div class="metric-grid">
             <div><span>{{ $t("Close reason") }}</span><strong>{{ closeReasonLabel(detail('trade.reason_close')) }}</strong></div>
-            <div><span>{{ $t("Exit fallback used") }}</span><strong>{{ $t(detail('trade.exit_price_fallback_used') ? 'Yes' : 'No') }}</strong></div>
+            <div><span>{{ $t("Exit fallback used") }}</span><strong>{{ $t(detail('trade.exit_price_fallback_used', false) ? 'Yes' : 'No') }}</strong></div>
             <div><span>{{ $t("Exit warning") }}</span><strong>{{ detail('trade.exit_price_warning') || '-' }}</strong></div>
             <div><span>{{ $t('Legacy reconciliation') }}</span><strong>{{ detail('trade.legacy_reconciliation_status') || '-' }}</strong></div>
           </div>
