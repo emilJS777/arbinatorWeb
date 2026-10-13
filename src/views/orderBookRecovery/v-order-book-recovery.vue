@@ -1684,6 +1684,16 @@ export default {
           <p class="config-hint">{{ $t('First fresh depth quote within 5 seconds after each horizon. Gaps remain missing; actual delayed exits may differ.') }}</p>
         </div>
 
+        <details class="detail-block" v-if="detail('decision_snapshot.pending_revalidation', null) || detail('decision_snapshot.pending_cancellation', null)">
+          <summary>{{ $t('Pending revalidation evidence') }}</summary>
+          <p>{{ $t('Exact observed consensus failures; missing historical evidence is not reconstructed.') }}</p>
+          <pre>{{ JSON.stringify({revalidation: detail('decision_snapshot.pending_revalidation', null), cancellation: detail('decision_snapshot.pending_cancellation', null)}, null, 2) }}</pre>
+        </details>
+        <details class="detail-block" v-if="detail('decision_snapshot.paper_shadow_prices', null)">
+          <summary>{{ $t('Shadow prices after cancellation or exit') }}</summary>
+          <p>{{ $t('Up to 125 seconds, at most 20 recent records per worker tick. Depth quotes only, not fills, net PnL or profit forecasts. Missing windows remain missing.') }}</p>
+          <pre>{{ JSON.stringify(detail('decision_snapshot.paper_shadow_prices', null), null, 2) }}</pre>
+        </details>
         <div class="detail-block">
           <h4>{{ $t("Reconciliation") }}</h4>
           <div class="metric-grid">

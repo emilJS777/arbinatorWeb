@@ -1,6 +1,10 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Pending revalidation evidence': 'Повторная проверка отложенного входа',
+  'Exact observed consensus failures; missing historical evidence is not reconstructed.': 'Сохранённые причины отказа консенсуса. Отсутствующие исторические данные не восстанавливаются.',
+  'Shadow prices after cancellation or exit': 'Теневые цены после отмены или выхода',
+  'Up to 125 seconds, at most 20 recent records per worker tick. Depth quotes only, not fills, net PnL or profit forecasts. Missing windows remain missing.': 'До 125 секунд, не более 20 последних записей за проход worker. Только котировки по глубине, не исполнения, net PnL или прогноз прибыли. Пропуски не заполняются.',
   'Entry quality measurements': 'Измерения качества входа',
   'Observed net MFE': 'Наблюдавшийся лучший net',
   'Observed net MAE': 'Наблюдавшийся худший net',
@@ -195,6 +199,10 @@ const ru = {
 };
 
 const en = {
+  'Pending revalidation evidence': 'Pending revalidation evidence',
+  'Exact observed consensus failures; missing historical evidence is not reconstructed.': 'Exact observed consensus failures; missing historical evidence is not reconstructed.',
+  'Shadow prices after cancellation or exit': 'Shadow prices after cancellation or exit',
+  'Up to 125 seconds, at most 20 recent records per worker tick. Depth quotes only, not fills, net PnL or profit forecasts. Missing windows remain missing.': 'Up to 125 seconds, at most 20 recent records per worker tick. Depth quotes only, not fills, net PnL or profit forecasts. Missing windows remain missing.',
   'Entry quality measurements': 'Entry quality measurements',
   'Observed net MFE': 'Observed net MFE',
   'Observed net MAE': 'Observed net MAE',
