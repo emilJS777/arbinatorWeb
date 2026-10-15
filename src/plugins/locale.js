@@ -1,6 +1,14 @@
 import {reactive} from 'vue';
 
 const ru = {
+  'Unvalidated': 'Не валидировано',
+  'V3: unchanged v2 plus a 60-second futures mid-price trend. Same direction required; 60–65s anchor, no gaps over 5s. Missing history blocks entry. Unvalidated; exits and TP/SL unchanged.': 'V3: v2 плюс направление mid-price futures за 60 секунд. Требуется совпадение направления; опорный стакан 60–65 с назад, без разрывов более 5 с. Нет истории — нет входа. Не валидировано; выходы и TP/SL прежние.',
+  'trend60_history_unavailable': 'Нет непрерывной 60-секундной истории',
+  'trend60_direction_not_confirmed': '60-секундный тренд не подтверждает вход',
+  'trend60_stale_or_future_book': 'Стакан устарел или имеет время из будущего',
+  'trend60_incompatible_market': 'Несовместимый futures-рынок',
+  'trend60_invalid_book': 'Невалидный стакан для тренда',
+  'trend60_out_of_order': 'Стакан старше последнего наблюдения тренда',
   'Pending revalidation evidence': 'Повторная проверка отложенного входа',
   'Exact observed consensus failures; missing historical evidence is not reconstructed.': 'Сохранённые причины отказа консенсуса. Отсутствующие исторические данные не восстанавливаются.',
   'Shadow prices after cancellation or exit': 'Теневые цены после отмены или выхода',
@@ -199,6 +207,14 @@ const ru = {
 };
 
 const en = {
+  'Unvalidated': 'Unvalidated',
+  'V3: unchanged v2 plus a 60-second futures mid-price trend. Same direction required; 60–65s anchor, no gaps over 5s. Missing history blocks entry. Unvalidated; exits and TP/SL unchanged.': 'V3: unchanged v2 plus a 60-second futures mid-price trend. Same direction required; 60–65s anchor, no gaps over 5s. Missing history blocks entry. Unvalidated; exits and TP/SL unchanged.',
+  'trend60_history_unavailable': 'Continuous 60-second history unavailable',
+  'trend60_direction_not_confirmed': '60-second trend does not confirm entry',
+  'trend60_stale_or_future_book': 'Stale or future book',
+  'trend60_incompatible_market': 'Incompatible futures market',
+  'trend60_invalid_book': 'Invalid book for trend',
+  'trend60_out_of_order': 'Out-of-order trend book',
   'Pending revalidation evidence': 'Pending revalidation evidence',
   'Exact observed consensus failures; missing historical evidence is not reconstructed.': 'Exact observed consensus failures; missing historical evidence is not reconstructed.',
   'Shadow prices after cancellation or exit': 'Shadow prices after cancellation or exit',

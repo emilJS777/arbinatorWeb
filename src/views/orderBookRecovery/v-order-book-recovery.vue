@@ -963,8 +963,10 @@ export default {
           <option value="baseline">{{ $t('Baseline unchanged') }}</option>
           <option value="adaptive_book_v1">Adaptive Book v1 · {{ $t('Paper only') }}</option>
           <option value="adaptive_book_v2">Adaptive Book v2 · {{ $t('Paper only') }}</option>
+          <option value="adaptive_trend_v3">Adaptive Trend v3 · {{ $t('Paper only') }} · {{ $t('Unvalidated') }}</option>
         </select></label>
-        <template v-if="['adaptive_book_v1', 'adaptive_book_v2'].includes(form.strategy_version)">
+        <template v-if="['adaptive_book_v1', 'adaptive_book_v2', 'adaptive_trend_v3'].includes(form.strategy_version)">
+          <p v-if="form.strategy_version === 'adaptive_trend_v3'" class="workspace-notice neutral">{{ $t('V3: unchanged v2 plus a 60-second futures mid-price trend. Same direction required; 60–65s anchor, no gaps over 5s. Missing history blocks entry. Unvalidated; exits and TP/SL unchanged.') }}</p>
           <p v-if="form.strategy_version === 'adaptive_book_v2'" class="workspace-notice neutral">{{ $t('V2 candidate: entry and reversal require at least 6 seconds / 4 fresh books. Neutral is not reversal. Re-entry requires a sustained signal reset first. Unproven; paper only.') }}</p>
           <p class="workspace-notice neutral">{{ $t('Experimental heuristic, not a return forecast. Trade flow unavailable. Funding reserve is an assumption, not a settlement. TP/SL and risk limits remain authoritative.') }}</p>
           <label>{{ $t('Persistent entry signal (seconds)') }}<input v-model.number="form.experiment_settings.persistence_seconds" type="number" min="1" max="60"/></label>
